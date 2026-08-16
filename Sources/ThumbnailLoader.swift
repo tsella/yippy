@@ -144,15 +144,21 @@ final class ThumbnailLoader: ObservableObject {
     /// Cached under a fixed name rather than a content-derived key: there is
     /// one logo per camera and it does not change, so a cache hit avoids
     /// re-fetching it on every visit to Settings.
-    func logo(from url: URL) async -> UIImage? {
+    /// Tries each candidate URL until one yields an image, since how the
+    /// camera's HTTP server exposes internal-flash paths is undocumented.
+    func logo(from candidates: [URL]) async -> UIImage? {
         let cameraID = self.cameraID
         if let hit = await ThumbnailCache.shared.image(named: "logo.png", cameraID: cameraID) {
             return hit
         }
-        guard let data = await Self.fetch(url, timeout: 15),
-              let image = UIImage(data: data) else { return nil }
-        await ThumbnailCache.shared.store(image, named: "logo.png", cameraID: cameraID)
-        return image
+        for url in candidates {
+            guard let data = await Self.fetch(url, timeout: 15),
+                  let image = UIImage(data: data) else { continue }
+            print("[settings] logo loaded from \(url)")
+            await ThumbnailCache.shared.store(image, named: "logo.png", cameraID: cameraID)
+            return image
+        }
+        return nil
     }
 
     /// Reconciles the disk cache with the camera's current contents.

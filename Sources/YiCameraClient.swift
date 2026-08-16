@@ -527,22 +527,34 @@ class YiCameraClient: ObservableObject {
     /// forms are accepted: an absolute http(s) URL, a camera-side absolute
     /// path under the SD card mount, or a bare filename served from the
     /// camera's HTTP root.
-    nonisolated static func logoURL(from info: [String: Any]) -> URL? {
+    nonisolated static func logoURLCandidates(from info: [String: Any]) -> [URL] {
         guard let raw = info["logo"].map({ "\($0)" })?
             .trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty, raw != "0", raw.lowercased() != "null" else { return nil }
+              !raw.isEmpty, raw != "0", raw.lowercased() != "null" else { return [] }
 
         if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
-            return URL(string: raw)
+            return URL(string: raw).map { [$0] } ?? []
         }
-        // The HTTP server is rooted at the SD card mount, so strip that prefix
-        // if present, then join with exactly one separator.
-        let relative = raw
-            .replacingOccurrences(of: YiFileManager.mediaRoot, with: "")
-            .drop { $0 == "/" }
-        let escaped = String(relative)
-            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String(relative)
-        return URL(string: "http://\(host)/\(escaped)")
+
+        // The logo lives on the camera's internal flash (`/tmp/fuse_z/`), not
+        // the SD card mount that media is served from — and how the HTTP server
+        // exposes it is undocumented. Try the plausible mappings in order:
+        // stripped of any `/tmp/fuse_X/` mount prefix (matching how media
+        // paths are served from the root), then the bare filename, then the
+        // full path verbatim.
+        var paths: [String] = []
+        if let range = raw.range(of: #"^/tmp/fuse_[a-z]/"#, options: [.regularExpression, .caseInsensitive]) {
+            paths.append(String(raw[range.upperBound...]))
+        }
+        paths.append((raw as NSString).lastPathComponent)
+        paths.append(String(raw.drop { $0 == "/" }))
+
+        var seen = Set<String>()
+        return paths.compactMap { path in
+            guard !path.isEmpty, seen.insert(path).inserted else { return nil }
+            let escaped = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+            return URL(string: "http://\(host)/\(escaped)")
+        }
     }
 
     /// Derives a stable per-device identifier from GET_DEVICE_INFO.

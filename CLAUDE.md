@@ -206,6 +206,17 @@ The `1282` listing returns both as ordinary entries, so:
   not mean the file exists, and deleting a non-existent path draws `-1` or `-13`
   from the camera. `YiFileManager.sidecarPaths` records what was listed.
 
+## The camera has more than one FUSE mount
+
+`/tmp/fuse_d/` is the SD card, and the HTTP server serves it from the root —
+`/tmp/fuse_d/DCIM/100MEDIA/x.jpg` is fetched as `http://192.168.42.1/DCIM/100MEDIA/x.jpg`.
+
+But it is not the only mount. `GET_DEVICE_INFO` reports the camera's logo as
+`/tmp/fuse_z/app_logo.jpg` — internal flash, not the card. How the HTTP server
+exposes that is undocumented, so `logoURLCandidates` strips any `/tmp/fuse_X/`
+prefix and falls back to the bare filename and the verbatim path, logging which
+one worked. **Do not assume `mediaRoot` is the only prefix to strip.**
+
 ## App Transport Security
 
 **The camera's HTTP file server needs an ATS exception.** Media, thumbnails and

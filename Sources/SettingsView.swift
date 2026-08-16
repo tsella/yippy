@@ -199,12 +199,12 @@ struct SettingsView: View {
 
             // The firmware reports an artwork path in `logo`; it is hidden from
             // the key list and shown as a header instead.
-            if let raw = response["logo"] {
-                print("[settings] logo field: \(raw)")
-            }
-            if let url = YiCameraClient.logoURL(from: response) {
-                logo = await ThumbnailLoader.shared.logo(from: url)
-                if logo == nil { print("[settings] logo fetch failed for \(url)") }
+            let candidates = YiCameraClient.logoURLCandidates(from: response)
+            if !candidates.isEmpty {
+                logo = await ThumbnailLoader.shared.logo(from: candidates)
+                if logo == nil {
+                    print("[settings] logo unavailable; tried \(candidates.map(\.absoluteString))")
+                }
             }
 
             cardSpace = await client.cardSpace()
