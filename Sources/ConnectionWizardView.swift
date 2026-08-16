@@ -47,22 +47,29 @@ struct ConnectionWizardView: View {
         }
     }
 
-    /// The messages range from one line to two, so the row reserves two lines
-    /// up front. Sizing to content instead would shift the Connect button
-    /// every time the status changed.
+    /// The messages range from one line to three at larger Dynamic Type sizes,
+    /// so the row reserves three lines up front and pins its content to the
+    /// top. Sizing to content instead would shift the Connect button every
+    /// time the status changed.
     private var statusRow: some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: statusIcon)
                 .frame(width: 16)
             Text(statusText)
                 .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(3)
             Spacer(minLength: 0)
         }
         .font(.caption)
         .foregroundStyle(statusColor)
-        .lineLimit(2, reservesSpace: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Fixed box, content top-aligned: a one-line message sits at the top
+        // rather than centring itself in the reserved space.
+        .frame(maxWidth: .infinity, minHeight: reservedStatusHeight,
+               alignment: .topLeading)
     }
+
+    /// Three lines of `.caption`, scaled with the user's text size setting.
+    @ScaledMetric(relativeTo: .caption) private var reservedStatusHeight: CGFloat = 48
     
     var body: some View {
         VStack(spacing: 0) {
