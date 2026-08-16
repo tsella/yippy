@@ -10,6 +10,7 @@
 		05594D9558C561F26793BB68 /* DebugScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0AA3C31053E6B5328CC350 /* DebugScannerView.swift */; };
 		0DAB07E2BDB5F998AC869452 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BF6E48C582A08A7F419201 /* ContentView.swift */; };
 		188B744FA93EE9BF180C136F /* AmbarellaProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46DE48B702625215760DA914 /* AmbarellaProtocol.swift */; };
+		2594BE87EA95D23FFF7C3617 /* CameraReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 273ACF502B292D8FAAE36580 /* CameraReachability.swift */; };
 		2619167C96544D2BDF7A1562 /* YiCameraClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC034362676E0A6C69CCFC9 /* YiCameraClient.swift */; };
 		2BC7F7FED101312F5A192784 /* YiCameraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 883499D348C4B9A7B24457F9 /* YiCameraApp.swift */; };
 		2FEF1B7E58DEC124C7328E01 /* ConnectionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04A51F89E5FDBB57DAAA836B /* ConnectionWizardView.swift */; };
@@ -54,6 +55,7 @@
 		0CC034362676E0A6C69CCFC9 /* YiCameraClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiCameraClient.swift; sourceTree = "<group>"; };
 		14421FCF5C9AD1BE6B2EA6B2 /* ConfirmationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmationOverlay.swift; sourceTree = "<group>"; };
 		23C98BACB6F7D7E8EC5A182C /* FilesystemExplorer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FilesystemExplorer.swift; path = FilesystemExplorer.swift; sourceTree = "<group>"; };
+		273ACF502B292D8FAAE36580 /* CameraReachability.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraReachability.swift; path = CameraReachability.swift; sourceTree = "<group>"; };
 		2BEA5EE6BEB0821F07C11A4D /* YiCamera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YiCamera.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D9963AC4352A77659468007 /* YiFileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiFileManager.swift; sourceTree = "<group>"; };
 		2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGalleryView.swift; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 				A412C540BA2156818B49EE9F /* CameraSettingsView.swift */,
 				635756632B5C6973919E67A1 /* PhotoLibrarySaver.swift */,
 				84C03CA163D76352321562BB /* MediaDetailView.swift */,
+				273ACF502B292D8FAAE36580 /* CameraReachability.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -281,6 +284,7 @@
 				402CA5DA13290DD1946CB28E /* CameraSettingsView.swift in Sources */,
 				F9713D0E111A2AD68FA7F3CF /* PhotoLibrarySaver.swift in Sources */,
 				E5A9E8F9A117050CDFB86C84 /* MediaDetailView.swift in Sources */,
+				2594BE87EA95D23FFF7C3617 /* CameraReachability.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

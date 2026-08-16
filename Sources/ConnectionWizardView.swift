@@ -2,7 +2,44 @@ import SwiftUI
 
 struct ConnectionWizardView: View {
     @ObservedObject var client: YiCameraClient
+    @StateObject private var reachability = CameraReachability()
     @State private var isAnimating = false
+
+    private var canConnect: Bool { reachability.isReachable }
+
+    private var buttonBackground: some ShapeStyle {
+        if client.isConnected {
+            return AnyShapeStyle(LinearGradient(colors: [.green, .mint],
+                                                startPoint: .leading, endPoint: .trailing))
+        }
+        if canConnect {
+            return AnyShapeStyle(LinearGradient(colors: [.blue, .cyan],
+                                                startPoint: .leading, endPoint: .trailing))
+        }
+        return AnyShapeStyle(Color.gray.opacity(0.4))
+    }
+
+    /// Explains *why* the button is disabled, so a greyed-out control is never
+    /// a dead end.
+    @ViewBuilder
+    private var statusRow: some View {
+        switch reachability.status {
+        case .reachable:
+            Label("Camera found at 192.168.42.1", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .unreachable:
+            Label("Camera not found — check you joined the YDXJ_ network and the camera is awake",
+                  systemImage: "wifi.exclamationmark")
+                .foregroundStyle(.orange)
+        case .noWiFi:
+            Label("Wi-Fi is off — join the camera's YDXJ_ network in Settings",
+                  systemImage: "wifi.slash")
+                .foregroundStyle(.orange)
+        case .checking, .unknown:
+            Label("Looking for the camera…", systemImage: "antenna.radiowaves.left.and.right")
+                .foregroundStyle(.secondary)
+        }
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -46,8 +83,22 @@ struct ConnectionWizardView: View {
             
             Spacer()
             
+            // Live reachability, so the button reflects whether the camera can
+            // actually be reached rather than inviting a tap that will hang.
+            statusRow
+                .font(.caption)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .animation(.easeInOut(duration: 0.2), value: reachability.status)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 12)
+
             // Connect Button
             Button(action: {
+                // Stop probing before connecting: both open a socket to the
+                // camera's control port, and the camera's TCP server handles
+                // one connection at a time.
+                reachability.stop()
                 client.connect()
             }) {
                 HStack {
@@ -55,7 +106,7 @@ struct ConnectionWizardView: View {
                         Image(systemName: "checkmark.circle.fill")
                         Text("Connected")
                     } else {
-                        Text("Tap to Connect")
+                        Text(canConnect ? "Tap to Connect" : "Waiting for Camera…")
                             .fontWeight(.semibold)
                     }
                 }
@@ -63,20 +114,25 @@ struct ConnectionWizardView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 18)
-                .background(
-                    client.isConnected ? 
-                    LinearGradient(colors: [.green, .mint], startPoint: .leading, endPoint: .trailing) :
-                    LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing)
-                )
+                .background(buttonBackground)
                 .cornerRadius(16)
-                .shadow(color: client.isConnected ? .green.opacity(0.3) : .blue.opacity(0.3), radius: 10, x: 0, y: 5)
+                .shadow(color: client.isConnected ? .green.opacity(0.3)
+                                                  : (canConnect ? .blue.opacity(0.3) : .clear),
+                        radius: 10, x: 0, y: 5)
             }
-            .disabled(client.isConnected)
+            .disabled(client.isConnected || !canConnect)
+            .animation(.easeInOut(duration: 0.2), value: canConnect)
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
         }
         .onAppear {
             isAnimating = true
+            reachability.start()
+        }
+        .onDisappear {
+            // Stop probing once connected or off-screen; the probe opens a
+            // socket to the same port the client uses.
+            reachability.stop()
         }
     }
 }
