@@ -59,7 +59,7 @@ struct RTSPPlayerView: UIViewRepresentable {
             // "=0" to one makes VLC reject the whole argument list and abort
             // before the player exists. Every option here is verified against
             // the shipped MobileVLCKit build.
-            let player = VLCMediaPlayer(options: [
+            var options = [
                 "--rtsp-tcp",
                 // Not HTTP tunnelling — that is a different transport.
                 "--no-rtsp-http",
@@ -69,7 +69,16 @@ struct RTSPPlayerView: UIViewRepresentable {
                 "--live-caching=300",
                 "--clock-jitter=0",
                 "--clock-synchro=0",
-            ])
+            ]
+            // Verbose logging, behind the debug toggle. "0.0.0.0" is only the
+            // symptom; this shows which module fails and at what stage of the
+            // RTSP handshake, which is the difference between a theory and a
+            // diagnosis. Off by default — it is extremely noisy.
+            if UserDefaults.standard.bool(forKey: "showDebugScanner") {
+                options.append("--verbose=2")
+            }
+
+            let player = VLCMediaPlayer(options: options)
             player.drawable = view
             player.delegate = self
 
