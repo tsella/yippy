@@ -1,0 +1,101 @@
+# Xcode
+#
+# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+
+## User settings
+xcuserdata/
+
+## compatibility with Xcode 8 and earlier (ignoring not required starting Xcode 9)
+*.xcscmblueprint
+*.xccheckout
+
+## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
+build/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+## Obj-C/Swift specific
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+#
+# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
+# Packages/
+# Package.pins
+# Package.resolved
+# *.xcodeproj
+#
+# Xcode automatically generates this directory with a .xcworkspacedata file and a workspace settings file
+# whether or not you create a workspace manually. The workspace settings file is currently not considered
+# to be a build artifact.
+#
+# Workspace settings configure the identity of the developer team to use for development signing
+# and can also configure other settings like the Swift language version and CocoaPods integration.
+#
+# While you should probably check in your workspace settings file, be aware that ignoring the generated
+# workspace directory can sometimes cause issues.
+#
+# .swiftpm/xcode/
+# .swiftpm/
+
+# CocoaPods
+#
+# We recommend against adding the Pods directory to your .gitignore. However
+# you should judge for yourself, the pros and cons are mentioned at:
+# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
+#
+Pods/
+#
+# Add this line if you want to avoid checking in source code from the Mac App Store framework.
+# Carthage/Build/
+
+# fastlane
+#
+# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
+# screenshots whenever they are needed.
+# For more information about the recommended setup visit:
+# https://docs.fastlane.tools/best-practices/source-control/
+
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+#
+# After new code Injection tools there's a generated folder /iOSInjectionProject
+# https://github.com/johnno1962/injectionforxcode
+
+iOSInjectionProject/
+
+# OS X
+#
+.DS_Store
+
+# XcodeGen
+#
+# Since we use xcodegen, it's common to ignore the .xcodeproj since it is generated on the fly.
+# But we'll leave it out of gitignore so the user can just push everything if they want.
+# Actually, since CocoaPods creates the workspace, let's ignore the project and workspace
+# Wait, if we ignore .xcodeproj, CocoaPods workspace won't open properly on another machine without running xcodegen.
+# This is standard for xcodegen: you check in project.yml and run xcodegen -> pod install.
+# Let's ignore them:
+*.xcodeproj
+*.xcworkspace
