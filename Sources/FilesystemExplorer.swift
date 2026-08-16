@@ -1,22 +1,15 @@
 import Foundation
 
-/// Debug tool that walks the camera's Linux filesystem breadth-first.
+/// Lists directories on the camera's Linux filesystem.
 ///
-/// The traversal is **breadth-first by depth level**, not a recursive descent:
-/// it lists every directory at depth N before any at depth N+1. That makes the
-/// cost of each additional level explicit and lets the walk stop at a useful
-/// depth instead of disappearing down one deep branch.
+/// `1282` lists any path, not just `DCIM`, so the whole root is reachable.
+/// `DirectoryBrowserView` drives this one level per tap — one request per
+/// navigation, which is what keeps a fragile control channel quiet.
 ///
-/// **Nothing is excluded by path.** `/proc`, `/sys` and `/dev` are synthetic and
-/// can be very large, and enumerating them may stress the firmware's TCP
-/// server — but they are walked like anything else. The depth limit and the
-/// entry/level caps are what bound the work.
-///
-/// Two guards remain, because without them the walk cannot terminate at all:
-/// every visited path is recorded (symlinks form cycles such as `/a/b -> /a`),
-/// and `.`/`..` are dropped.
+/// **`.` and `..` are dropped**, so a caller that follows entries cannot walk
+/// in a circle.
 @MainActor
-final class FilesystemExplorer: ObservableObject {
+final class FilesystemExplorer {
 
     struct Entry: Identifiable, Hashable {
         var id: String { path }
@@ -45,117 +38,17 @@ final class FilesystemExplorer: ObservableObject {
         }
     }
 
-    @Published private(set) var entries: [Entry] = []
-    @Published private(set) var log: [String] = []
-    @Published private(set) var isRunning = false
-    @Published private(set) var progress = ""
-
-    /// Hard ceilings so a pathological filesystem cannot run forever.
-    ///
-    /// Nothing is excluded by path — `/proc`, `/sys` and `/dev` are walked like
-    /// anything else. They are synthetic and can be very large, so these caps
-    /// (and the depth limit) are the only thing bounding the walk.
-    private static let maxEntries = 20000
-    private static let maxDirectoriesPerLevel = 2000
+    /// Generous: the camera can take seconds over a large directory, and a
+    /// premature timeout leaves a request in flight on a channel that must
+    /// carry exactly one at a time.
     private static let listTimeout: Duration = .seconds(8)
-    /// The camera's TCP server is fragile; pace the requests.
-    private static let interRequestDelay: Duration = .milliseconds(120)
 
     private let client: YiCameraClient
-    private var task: Task<Void, Never>?
 
     init(client: YiCameraClient) {
         self.client = client
     }
 
-    func cancel() {
-        task?.cancel()
-        task = nil
-        isRunning = false
-        progress = ""
-        note("Cancelled.")
-    }
-
-    /// Walks the filesystem from `root` down to `maxDepth` levels.
-    func explore(root: String = "/", maxDepth: Int = 3) {
-        guard !isRunning else { return }
-        isRunning = true
-        entries = []
-        log = []
-
-        task = Task {
-            defer { isRunning = false; progress = "" }
-
-            note("Walking \(root) to depth \(maxDepth) (breadth-first).")
-            note("No paths excluded — /proc, /sys and /dev are included.")
-
-            // `visited` guards against symlink cycles: a path is listed at most
-            // once no matter how many routes lead back to it.
-            var visited: Set<String> = []
-            var frontier: [String] = [root]
-            visited.insert(normalise(root))
-
-            for depth in 0...maxDepth {
-                if Task.isCancelled || frontier.isEmpty { break }
-                guard client.isConnected else {
-                    note("Aborted: camera disconnected.")
-                    break
-                }
-                guard entries.count < Self.maxEntries else {
-                    note("Stopped: reached the \(Self.maxEntries)-entry cap.")
-                    break
-                }
-
-                note("── depth \(depth): \(frontier.count) director\(frontier.count == 1 ? "y" : "ies")")
-
-                var next: [String] = []
-                for (index, directory) in frontier.enumerated() {
-                    if Task.isCancelled { break }
-                    progress = "Depth \(depth) — \(index + 1)/\(frontier.count): \(directory)"
-
-                    let children = await listIgnoringErrors(directory: directory, depth: depth)
-
-                    for child in children {
-                        entries.append(child)
-                        guard child.isDirectory, depth < maxDepth else { continue }
-
-                        let key = normalise(child.path)
-                        // Cycle guard. Not a filter — without it a symlink loop
-                        // (/a/b -> /a) never terminates.
-                        guard !visited.contains(key) else {
-                            note("↩︎ already visited: \(child.path)")
-                            continue
-                        }
-                        visited.insert(key)
-                        next.append(child.path)
-                    }
-
-                    try? await Task.sleep(for: Self.interRequestDelay)
-                }
-
-                if next.count > Self.maxDirectoriesPerLevel {
-                    note("⚠︎ depth \(depth + 1) had \(next.count) directories; truncated to \(Self.maxDirectoriesPerLevel).")
-                    next = Array(next.prefix(Self.maxDirectoriesPerLevel))
-                }
-                frontier = next
-            }
-
-            let dirs = entries.filter(\.isDirectory).count
-            note("Done. \(entries.count) entries (\(dirs) directories, \(entries.count - dirs) files).")
-        }
-    }
-
-    /// Lists a single directory, swallowing errors — a permission error or
-    /// unreadable node must not stop the whole walk. Use `list(directory:)`
-    /// when the caller needs to report the failure.
-    private func listIgnoringErrors(directory: String, depth: Int) async -> [Entry] {
-        do {
-            return try await list(directory: directory, depth: depth)
-        } catch {
-            note("✗ \(directory): \(error.localizedDescription)")
-            return []
-        }
-    }
 
     /// Lists a single directory, throwing on failure.
     ///
@@ -242,13 +135,4 @@ final class FilesystemExplorer: ObservableObject {
         return "\(base)/\(leaf)"
     }
 
-    /// Collapses trailing slashes so `/tmp` and `/tmp/` cannot both be visited.
-    private func normalise(_ path: String) -> String {
-        path == "/" ? path : String(path.reversed().drop { $0 == "/" }.reversed())
-    }
-
-    private func note(_ message: String) {
-        log.append(message)
-        print("[fs] \(message)")
-    }
 }

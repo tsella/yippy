@@ -158,7 +158,8 @@ struct CameraSettingsView: View {
             // mode disallows it — several settings are only available at
             // certain resolutions or capture modes. Say that rather than
             // repeating the generic "camera busy or wrong mode".
-            if case YiCameraError.commandFailed(_, let rval) = error, rval == -21 {
+            if case YiCameraError.commandFailed(_, let rval) = error,
+               rval == YiReturnCode.wrongMode {
                 let label = Self.curated.first { $0.key == key }?.label ?? key
                 errorText = "The camera refused \(value) for \(label). This setting is usually unavailable at the current resolution or capture mode — change that first."
             } else {

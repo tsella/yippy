@@ -2,14 +2,15 @@ import SwiftUI
 
 /// Interactive one-directory-at-a-time browser.
 ///
-/// Distinct from `FilesystemExplorerView`, which walks many levels at once:
-/// this lists exactly one directory per request, so tapping into a folder costs
-/// a single `1282` call. Nothing is excluded — `/proc`, `/sys` and `/dev` can be
-/// opened like any other directory.
+/// Lists exactly one directory per request, so tapping into a folder costs a
+/// single `1282` call — the pacing a fragile control channel needs. Nothing is
+/// excluded: `/proc`, `/sys` and `/dev` open like any other directory.
 struct DirectoryBrowserView: View {
     @ObservedObject var client: YiCameraClient
     @ObservedObject var fileManager: YiFileManager
-    @StateObject private var explorer: FilesystemExplorer
+    /// Stateless over the client, so it needs no observation of its own — the
+    /// listing it returns lives in `entries` below.
+    private let explorer: FilesystemExplorer
 
     @State private var path: String
     @State private var entries: [FilesystemExplorer.Entry] = []
@@ -23,7 +24,7 @@ struct DirectoryBrowserView: View {
         self.client = client
         self.fileManager = fileManager
         _path = State(initialValue: path)
-        _explorer = StateObject(wrappedValue: FilesystemExplorer(client: client))
+        explorer = FilesystemExplorer(client: client)
     }
 
     var body: some View {
@@ -233,7 +234,8 @@ struct DirectoryBrowserView: View {
             // -26 means this path is not a directory. When the camera did not
             // mark it either way, that answer is the classification: show it
             // as a file rather than an error.
-            if case YiCameraError.commandFailed(_, let rval) = error, rval == -26 {
+            if case YiCameraError.commandFailed(_, let rval) = error,
+               rval == YiReturnCode.notADirectory {
                 notADirectory = true
                 errorText = nil
             } else {

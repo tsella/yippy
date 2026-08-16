@@ -164,7 +164,7 @@ class YiFileManager: ObservableObject {
             let rval = response.rval
 
             // An empty or unformatted card is a normal state, not an error.
-            if rval == -26 {
+            if rval == YiReturnCode.notADirectory {
                 files = []
                 return
             }

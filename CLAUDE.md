@@ -328,6 +328,11 @@ All `msg_id`, `rval`, and notification `type` values live in
 inline magic numbers**, and log failures via `YiReturnCode.describe(rval:msgId:)`
 so the code and its meaning both appear.
 
+The two codes callers branch on have names: `YiReturnCode.wrongMode` (`-21`,
+busy or wrong mode — **never retryable**) and `YiReturnCode.notADirectory`
+(`-26`, which for `LIST_DIRECTORY` doubles as a classification: listing a path
+and getting it back is how an ambiguous entry is identified as a file).
+
 ### Response quirks that break naive parsing
 
 - **Directory listings (`1282`) use the filename as the JSON *key*** and pack the
@@ -527,15 +532,15 @@ Observed on real hardware, not documented upstream:
 - **`FilesystemExplorer` is the listing layer; `DirectoryBrowserView` is the UI.**
   `1282` lists any path, not just `DCIM`, so the camera's whole Linux root is
   reachable. The browser issues one `1282` per tap, drilling down via
-  `NavigationLink`. Directories are inferred by *failing* to parse a
+  `NavigationLink` — one request per navigation is the pacing this channel
+  needs. Directories are inferred by *failing* to parse a
   `"<size> bytes|<date>"` value, since firmwares report them inconsistently.
-- **`explore()` — the bulk breadth-first walk — has no UI any more**, but the
-  method remains. If it is ever re-exposed, its guards are load-bearing, not
-  stylistic: **nothing is excluded by path** (`/proc`, `/sys` and `/dev` are
-  walked by design), so only the depth limit, the entry/per-level caps and the
-  `visited` set stop it running away. That set plus the `.`/`..` filter are what
-  make a symlink cycle such as `/proc/self/cwd` terminate at all, and the
-  inter-request delay is what keeps the camera's TCP server alive.
+- **The bulk breadth-first walk has been removed.** It swept the camera's whole
+  root, excluding nothing (`/proc`, `/sys` and `/dev` included), and only a
+  depth limit, entry caps, a `visited` set and an inter-request delay kept it
+  from running away on a firmware that dies under load. **Do not reintroduce
+  it** — the interactive browser reaches everything it did, one directory at a
+  time, without the blast radius.
 - **Never strip the trailing slash from a directory path.** The camera marks
   directories with one (`tmp/`, `fuse_z/`), and it is not cosmetic: listing
   `/tmp` kills the camera's TCP server outright, while `/tmp/` lists fine.

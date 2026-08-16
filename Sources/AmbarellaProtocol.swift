@@ -106,6 +106,13 @@ enum YiReturnCode {
     /// timeouts that needed a power cycle.
     static let wrongMode = -21
 
+    /// The path is not a directory — or the SD card is missing or unformatted.
+    ///
+    /// For `LIST_DIRECTORY` this doubles as a *classification*: when a listing
+    /// cannot say whether an entry is a file or a directory, listing it and
+    /// getting this back is the answer.
+    static let notADirectory = -26
+
     private static let table: [Int: String] = [
           0: "Success",
          -1: "Command failed / invalid state for this command",
