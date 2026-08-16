@@ -181,9 +181,16 @@ final class FilesystemExplorer: ObservableObject {
                 // from the size — a Linux directory reports a real block size
                 // that is indistinguishable from a file's.
                 let markedDirectory = name.hasSuffix("/")
-                let trimmedName = markedDirectory ? String(name.dropLast()) : name
-                return Entry(path: join(directory, trimmedName),
-                             name: trimmedName,
+                let displayName = markedDirectory ? String(name.dropLast()) : name
+
+                // **Keep the trailing slash in the path.** Listing `/tmp`
+                // without it kills the camera's TCP server outright, while
+                // `/tmp/` lists fine — verified against a browse that worked
+                // before the slash was stripped. The name is trimmed for
+                // display only; the path is what goes back to the camera.
+                let childPath = join(directory, name)
+                return Entry(path: childPath,
+                             name: displayName,
                              isDirectory: markedDirectory || inferredDirectory,
                              isMarkedDirectory: markedDirectory,
                              size: size,

@@ -331,6 +331,12 @@ Observed on real hardware, not documented upstream:
   value, since firmwares report them inconsistently.
 - `DirectoryBrowserView` is the interactive counterpart: one `1282` per tap,
   drilling down via `NavigationLink`. Prefer it over raising the walk depth.
+- **Never strip the trailing slash from a directory path.** The camera marks
+  directories with one (`tmp/`, `fuse_z/`), and it is not cosmetic: listing
+  `/tmp` kills the camera's TCP server outright, while `/tmp/` lists fine.
+  Verified by comparing a working browse against one that died on the first
+  `LIST_DIRECTORY` after the slash was trimmed. Trim it for *display* only —
+  `Entry.name` is trimmed, `Entry.path` is not.
 - **Never gate navigation on `isDirectory`.** A listing cannot reliably identify
   a directory: on Linux they usually report a real block size (`4096 bytes`),
   which is indistinguishable from a file. Gating `NavigationLink` on it made
