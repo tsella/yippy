@@ -84,16 +84,16 @@ struct DashboardView: View {
                     // while it is mounted.
                     H264StreamView(stream: stream)
                         .onAppear {
-                            // The camera stops the viewfinder while recording,
-                            // so this remounts on every record cycle. Claiming
-                            // is idempotent for the stream itself, which owns
-                            // the session for as long as it is running.
-                            guard stream.isActive || client.claimStreamSession() else { return }
+                            // The camera stops the viewfinder while recording
+                            // and on restart, so this remounts often. Claiming
+                            // is idempotent for the viewfinder, so a remount
+                            // re-claims rather than being refused.
+                            guard client.claimStreamSession(.viewfinder) else { return }
                             stream.start(url: client.streamURL)
                         }
                         .onDisappear {
                             stream.stop()
-                            client.releaseStreamSession()
+                            client.releaseStreamSession(.viewfinder)
                         }
 
                     if case .failed(let reason) = stream.state {
@@ -127,11 +127,13 @@ struct DashboardView: View {
                 ZStack {
                     Color(.darkGray)
                     VStack(spacing: 12) {
-                        if client.isReviving {
-                            // Recording switches video mode and takes the RTSP
-                            // server with it; the client is asking for it back.
-                            ProgressView().tint(.white)
-                            Text("Restoring preview…")
+                        if client.isRecording {
+                            // The camera stops the viewfinder while recording
+                            // and restores it itself when the file is written.
+                            Image(systemName: "record.circle")
+                                .font(.largeTitle)
+                            Text("Preview paused while recording")
+                                .multilineTextAlignment(.center)
                         } else {
                             Image(systemName: "video.slash")
                                 .font(.largeTitle)

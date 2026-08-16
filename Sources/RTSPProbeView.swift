@@ -15,12 +15,15 @@ struct RTSPProbeView: View {
         .navigationBarTitleDisplayMode(.inline)
         // The probe owns the camera's single RTSP session while it runs;
         // hand it back the moment it finishes, however it finished.
+        // Releases are holder-keyed, so leaving this tab cannot free a session
+        // the dashboard's viewfinder is holding — they live in different tabs
+        // of the same TabView and both lifecycles fire independently.
         .onChange(of: probe.isRunning) { running in
-            if !running { client.releaseStreamSession() }
+            if !running { client.releaseStreamSession(.probe) }
         }
         .onDisappear {
             probe.cancel()
-            client.releaseStreamSession()
+            client.releaseStreamSession(.probe)
         }
     }
 
@@ -46,7 +49,7 @@ struct RTSPProbeView: View {
                     ProgressView().padding(.leading, 8)
                 } else {
                     Button("Run Probe") {
-                        guard client.claimStreamSession() else { return }
+                        guard client.claimStreamSession(.probe) else { return }
                         probe.run(url: client.streamURL)
                     }
                     .buttonStyle(.borderedProminent)

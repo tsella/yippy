@@ -196,21 +196,37 @@ Heartbeat failed: The camera did not respond in time.
 RECORD_START failed: The camera did not respond in time.
 ```
 
-Three refused commands were enough to wedge the control channel. So
-`reviveViewfinderAfterModeChange()` **does not run while `isRecording`**, and
-treats `-21` as terminal rather than retryable wherever it appears. It remains
-only as a fallback for a firmware that drops the stream and does *not* restore
-it — which this one always does, at `video_record_complete`.
+Three refused commands were enough to wedge the control channel. The revival
+mechanism that issued them **has been removed entirely** — the camera restores
+the viewfinder itself (`vf_start` after both `video_record_complete` and
+`photo_taken`), so it defended against a failure that does not occur, while its
+cancellation obligations across four lifecycle methods were a standing hazard:
+one forgotten cancel is a stray `259` into a busy camera.
+
+`vf_stop` now just records the state. The manual "Restart Stream" button is the
+escape hatch if a firmware ever fails to self-restore.
 
 This is the general rule on this camera: a refusal is information, not an
 invitation to retry. Retrying into a busy or wrong-mode camera is how the
 control channel dies.
 
-Confirmed working: the stream stops at `start_video_record`, the client does
-not chase it (`Not reviving viewfinder — the camera is recording and will
-restore it itself`), and `vf_start` at `video_record_complete` remounts the
-player, which reconnects and decodes again. The heartbeat stays healthy
-throughout — the symptom that proved the retries were the thing killing it.
+Confirmed working: the stream stops at `start_video_record`, the client does not
+chase it, and `vf_start` at `video_record_complete` remounts the player, which
+reconnects and decodes again. The heartbeat stays healthy throughout — the
+symptom that proved the retries were the thing killing it.
+
+### The display layer must be re-configured when a view attaches
+
+SwiftUI rebuilds `H264StreamView` on every `vf_stop`/`vf_start` — every record
+cycle and every camera restart. `RTSPStream.view` is `weak`, and `configure()`
+runs once during the handshake, so a view attaching *after* that point had no
+format description: `enqueue` dropped every sample at its `guard` and the result
+was **a perfect transport log over a black screen** — `first frame decoded`,
+frames counting up, nothing on the device.
+
+`attach(_:)` therefore re-applies the stored parameter sets. When diagnosing a
+blank preview, note that `framesDecoded` counts *enqueues*, not displayed
+frames; `[h264]` lines report the layer's own status and are the ones to read.
 
 Anything that issues `260` — `stopViewfinder()`, `restartViewfinder()` — must
 cancel a pending revival first, since that `260` draws its own `vf_stop` and the

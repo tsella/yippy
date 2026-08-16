@@ -121,9 +121,15 @@ struct H264Depacketizer {
 
     /// Records SPS/PPS as they arrive in-band, so the decoder can be
     /// configured even if the SDP did not carry them.
-    mutating func noteParameterSets(from units: [Data]) {
-        var sps = parameterSets?.sps
-        var pps = parameterSets?.pps
+    ///
+    /// Returns `true` only when the sets actually changed, so callers can skip
+    /// reconfiguring the decoder. Parameter sets repeat before every IDR, so a
+    /// caller that reconfigures on each sighting rebuilds the format
+    /// description several times a second for identical bytes.
+    @discardableResult
+    mutating func noteParameterSets(from units: [Data]) -> Bool {
+        var sps: Data?
+        var pps: Data?
         for unit in units {
             guard let first = unit.first else { continue }
             switch first & 0x1F {
@@ -132,7 +138,15 @@ struct H264Depacketizer {
             default: break
             }
         }
-        if let sps, let pps { parameterSets = (sps, pps) }
+        // Nothing here carried parameter sets — the common case, so leave
+        // before touching any stored state.
+        guard sps != nil || pps != nil else { return false }
+
+        guard let newSPS = sps ?? parameterSets?.sps,
+              let newPPS = pps ?? parameterSets?.pps else { return false }
+        guard newSPS != parameterSets?.sps || newPPS != parameterSets?.pps else { return false }
+        parameterSets = (newSPS, newPPS)
+        return true
     }
 
     /// Parses `sprop-parameter-sets` from the SDP's `a=fmtp` line — a
@@ -160,6 +174,9 @@ struct H264Depacketizer {
     /// `CMBlockBuffer` expects (AVCC), rather than Annex B start codes.
     static func avcc(_ units: [Data]) -> Data {
         var out = Data()
+        // Sized up front: a multi-NAL keyframe would otherwise reallocate and
+        // copy a large buffer several times as it grows.
+        out.reserveCapacity(units.reduce(0) { $0 + $1.count + 4 })
         for unit in units {
             var length = UInt32(unit.count).bigEndian
             withUnsafeBytes(of: &length) { out.append(contentsOf: $0) }

@@ -44,15 +44,32 @@ final class RTSPStream: ObservableObject {
     private var depacketizer = H264Depacketizer()
     private weak var view: H264StreamLayerView?
 
-    /// What the layer is currently configured with, so repeated in-band
-    /// parameter sets only rebuild the format description when they change.
+    /// What the layer is currently configured with. Re-applied when a view
+    /// attaches mid-stream, since SwiftUI rebuilds it on every vf_stop/vf_start.
     private var activeParameterSets: (sps: Data, pps: Data)?
+
+    /// The true frame count; `framesDecoded` mirrors it at most once a second.
+    private var frameCount = 0
+    private var lastPublishedFrames = Date.distantPast
 
     /// Frames carry a 90 kHz RTP timestamp; the layer wants seconds.
     private static let clockRate: Int32 = 90_000
 
+    /// Binds the display layer, configuring it immediately if the stream is
+    /// already running.
+    ///
+    /// **A view can attach after the handshake has already read SPS/PPS.**
+    /// SwiftUI rebuilds this view whenever `isViewfinderActive` toggles — every
+    /// record cycle and every camera restart — so `configure` during the
+    /// handshake can land on a view that is about to be replaced. Without
+    /// re-applying here the new layer has no format description, `enqueue`
+    /// drops every sample at its `guard`, and the result is a perfect transport
+    /// log over a black screen.
     func attach(_ view: H264StreamLayerView) {
         self.view = view
+        if let sets = activeParameterSets {
+            view.configure(sps: sets.sps, pps: sets.pps)
+        }
     }
 
     func start(url: URL) {
@@ -63,6 +80,8 @@ final class RTSPStream: ObservableObject {
         log("start \(url.absoluteString)")
         state = .connecting
         framesDecoded = 0
+        frameCount = 0
+        lastPublishedFrames = .distantPast
         depacketizer = H264Depacketizer()
         activeParameterSets = nil
         task = Task { await run(url: url) }
@@ -263,55 +282,61 @@ final class RTSPStream: ObservableObject {
     }
 
     private func readRTP(from flow: RTPFlow) async {
-        var firstPacketLogged = false
-        var firstFrameLogged = false
-
-        while !Task.isCancelled {
-            // Only the *first* packet gets a deadline. Once video is flowing a
-            // gap is a dropped datagram, not a dead stream.
-            let datagram: Data?
-            if firstPacketLogged {
-                datagram = await flow.next()
-            } else {
-                datagram = await Self.withTimeout(.seconds(10)) { await flow.next() }
-                guard datagram != nil else {
-                    log("✗ no RTP arrived within 10s — the camera never sent to our port")
-                    state = .failed("The camera accepted the stream but sent no video.")
-                    return
-                }
-            }
-            guard let datagram, !datagram.isEmpty else {
-                if datagram == nil { break }   // flow closed
-                continue
-            }
-
-            if !firstPacketLogged {
-                firstPacketLogged = true
-                log("✓ first RTP packet (\(datagram.count) bytes) from \(flow.endpointDescription)")
-            }
-
-            let units = depacketizer.handle(rtpPacket: datagram)
-            guard !units.isEmpty else { continue }
-
-            // Parameter sets also arrive in-band, and they change: the camera
-            // reconfigures its encoder when recording starts, so the SDP's
-            // sets go stale mid-session. Honour whatever the stream carries.
-            depacketizer.noteParameterSets(from: units)
-            if let sets = depacketizer.parameterSets {
-                configure(sps: sets.sps, pps: sets.pps)
-            }
-
-            let timestamp = Self.timestamp(of: datagram)
-            let time = CMTime(value: CMTimeValue(timestamp), timescale: Self.clockRate)
-            view?.enqueue(H264Depacketizer.avcc(units), presentationTime: time)
-
-            framesDecoded += 1
-            if !firstFrameLogged {
-                firstFrameLogged = true
-                log("✓ first frame decoded")
-            }
+        // Only the first packet gets a deadline — once video is flowing, a gap
+        // is a dropped datagram, not a dead stream. Reading it outside the loop
+        // keeps that distinction out of the per-packet path.
+        guard let first = await Self.withTimeout(.seconds(10), { await flow.next() }) else {
+            log("✗ no RTP arrived within 10s — the camera never sent to our port")
+            state = .failed("The camera accepted the stream but sent no video.")
+            return
         }
-        log("RTP reader stopped after \(framesDecoded) frames")
+        log("✓ first RTP packet (\(first.count) bytes) from \(flow.endpointDescription)")
+
+        var firstFrameLogged = false
+        var datagram: Data? = first
+
+        // The loop ends when the flow closes (next() returns nil) or on cancel.
+        while let packet = datagram, !Task.isCancelled {
+            process(packet, firstFrameLogged: &firstFrameLogged)
+            datagram = await flow.next()
+        }
+        framesDecoded = frameCount
+        log("RTP reader stopped after \(frameCount) frames")
+    }
+
+    /// Depacketises one datagram and enqueues whatever access unit it completes.
+    private func process(_ packet: Data, firstFrameLogged: inout Bool) {
+        guard !packet.isEmpty else { return }
+
+        let units = depacketizer.handle(rtpPacket: packet)
+        guard !units.isEmpty else { return }
+
+        // Parameter sets also arrive in-band and they change: the camera
+        // reconfigures its encoder when recording starts, so the SDP's sets go
+        // stale mid-session. They repeat before every IDR, so only reconfigure
+        // when they actually differ.
+        if depacketizer.noteParameterSets(from: units), let sets = depacketizer.parameterSets {
+            log("in-band parameter sets changed — reconfiguring decoder")
+            configure(sps: sets.sps, pps: sets.pps)
+        }
+
+        let timestamp = Self.timestamp(of: packet)
+        let time = CMTime(value: CMTimeValue(timestamp), timescale: Self.clockRate)
+        view?.enqueue(H264Depacketizer.avcc(units), presentationTime: time)
+
+        // Counted plainly and published at most once a second: `framesDecoded`
+        // is @Published, so incrementing it per frame invalidates every view
+        // observing the stream ~30 times a second for a debug counter.
+        frameCount += 1
+        if !firstFrameLogged {
+            firstFrameLogged = true
+            log("✓ first frame decoded")
+            framesDecoded = frameCount
+            lastPublishedFrames = Date()
+        } else if Date().timeIntervalSince(lastPublishedFrames) >= 1 {
+            framesDecoded = frameCount
+            lastPublishedFrames = Date()
+        }
     }
 
     /// Receives RTP datagrams from a UDP listener.

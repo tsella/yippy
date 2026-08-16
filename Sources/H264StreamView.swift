@@ -15,6 +15,8 @@ final class H264StreamLayerView: UIView {
     }
 
     private var formatDescription: CMVideoFormatDescription?
+    private var enqueued = 0
+    private var failureCount = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -106,13 +108,40 @@ final class H264StreamLayerView: UIView {
                                  Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
         }
 
-        if displayLayer.status == .failed { displayLayer.flush() }
+        // The layer can reject samples silently: the RTP path keeps counting
+        // frames while nothing reaches the screen, which looks like a working
+        // stream in the log and a black rectangle on the device. Report the
+        // reason rather than flushing it away unexamined.
+        if displayLayer.status == .failed {
+            let reason = displayLayer.error.map { "\($0)" } ?? "unknown"
+            print("[h264] display layer failed (\(reason)) — flushing and recovering")
+            displayLayer.flush()
+            failureCount += 1
+        }
         displayLayer.enqueue(sampleBuffer)
+        enqueued += 1
+
+        // One line per ~5s at 30fps, enough to tell "frames are reaching the
+        // layer" from "frames stopped" without flooding the console.
+        if enqueued % 150 == 0 {
+            print("[h264] \(enqueued) samples enqueued, status=\(statusName), failures=\(failureCount)")
+        }
+    }
+
+    private var statusName: String {
+        switch displayLayer.status {
+        case .unknown:  "unknown"
+        case .rendering: "rendering"
+        case .failed:   "failed"
+        @unknown default: "?"
+        }
     }
 
     func reset() {
         displayLayer.flushAndRemoveImage()
         formatDescription = nil
+        enqueued = 0
+        failureCount = 0
     }
 }
 

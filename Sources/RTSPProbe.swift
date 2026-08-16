@@ -121,39 +121,36 @@ final class RTSPProbe: ObservableObject {
         //     "error 96 - No message available on STREAM" in every probe log.
         //     The failure was the probe's, not the camera's: the viewfinder's
         //     UDP SETUP succeeds on a socket that never made the TCP attempt.
-        var session: String?
         note("⚠︎ Skipping interleaved TCP — this firmware answers 461 and then")
         note("  closes the control socket, which breaks the UDP SETUP after it.")
 
-        // 3b. Fall back to UDP, binding our own receive socket. live555 fails
-        //     here because it derives the local address via a multicast trick
-        //     that returns 0.0.0.0 on iOS. NWConnection has no such problem, so
-        //     this establishes whether the *camera* will stream over UDP.
+        // 3b. UDP, binding our own receive socket. live555 fails here because
+        //     it derives the local address via a multicast trick that returns
+        //     0.0.0.0 on iOS; Network.framework has no such problem.
         var rtpListener: NWListener?
         let rtpFlow = RTSPStream.RTPFlow()
-        if session == nil {
-            do {
-                let (rtp, port) = try Self.bindRTPPort(delivering: rtpFlow)
-                rtpListener = rtp
-                note("Bound local UDP port \(port) for RTP")
+        var session: String?
+        do {
+            let (rtp, port) = try Self.bindRTPPort(delivering: rtpFlow)
+            rtpListener = rtp
+            note("Bound local UDP port \(port) for RTP")
 
-                if let setup = await request(
-                    "SETUP", target: track,
-                    headers: ["Transport: RTP/AVP;unicast;client_port=\(port)-\(port + 1)"]
-                ), let id = Self.header("Session", in: setup)?
-                    .split(separator: ";").first.map(String.init) {
-                    session = id
-                    if let transport = Self.header("Transport", in: setup) {
-                        note("  transport: \(transport)")
-                    }
+            if let setup = await request(
+                "SETUP", target: track,
+                headers: ["Transport: RTP/AVP;unicast;client_port=\(port)-\(port + 1)"]
+            ), let id = Self.header("Session", in: setup)?
+                .split(separator: ";").first.map(String.init) {
+                session = id
+                if let transport = Self.header("Transport", in: setup) {
+                    note("  transport: \(transport)")
                 }
-            } catch {
-                note("✗ Could not bind a local UDP port: \(error.localizedDescription)")
             }
+        } catch {
+            note("✗ Could not bind a local UDP port: \(error.localizedDescription)")
         }
 
         guard let session else {
-            note("✗ SETUP refused for both transports — no session.")
+            note("✗ SETUP refused — no session.")
             return
         }
         note("  session: \(session)")
@@ -178,37 +175,6 @@ final class RTSPProbe: ObservableObject {
         rtpFlow.finish()
         rtpListener?.newConnectionHandler = nil
         rtpListener?.cancel()
-    }
-
-    /// Reads `$<channel><length><payload>` frames until the deadline.
-    /// Reads RTP framed on the RTSP connection itself (`$<channel><len><data>`).
-    /// Unused against this camera, which refuses interleaved TCP — kept for a
-    /// firmware that accepts it, where no UDP bind would be needed at all.
-    private func readInterleaved(_ connection: NWConnection, seconds: TimeInterval) async {
-        let deadline = Date().addingTimeInterval(seconds)
-        var buffer = Data()
-
-        while Date() < deadline, !Task.isCancelled {
-            guard let chunk = try? await Self.receive(connection, max: 65536), !chunk.isEmpty else { break }
-            buffer.append(chunk)
-            bytesReceived += chunk.count
-
-            // Frame as much as the buffer holds.
-            while buffer.count >= 4 {
-                guard buffer[buffer.startIndex] == UInt8(ascii: "$") else {
-                    // Not a frame marker — drop a byte and resync.
-                    buffer.removeFirst()
-                    continue
-                }
-                let lengthIndex = buffer.index(buffer.startIndex, offsetBy: 2)
-                let length = Int(buffer[lengthIndex]) << 8
-                    | Int(buffer[buffer.index(after: lengthIndex)])
-                guard buffer.count >= 4 + length else { break }
-                buffer.removeFirst(4 + length)
-                packetsReceived += 1
-                if packetsReceived == 1 { note("  first RTP packet: \(length) bytes") }
-            }
-        }
     }
 
     /// Binds a local UDP port for RTP and reports which one.
