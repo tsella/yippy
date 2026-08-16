@@ -109,6 +109,38 @@ The `START_SESSION` (257) response advertises the stream URL in its `rtsp`
 field; prefer it over hardcoding. Track liveness via the `vf_start`/`vf_stop`
 notifications and only mount the player while the viewfinder is active.
 
+### The camera serves one RTSP session at a time
+
+**The viewfinder and the debug probe cannot both hold it.** Whichever loses gets
+a refused `SETUP` on a half-closed socket — observed on hardware as `461
+Unsupported Transport` (the probe's TCP attempt) followed by
+`error 96 - No message available on STREAM` when the UDP retry is written to a
+socket the camera has already sent `RST` on. Every probe run in that state
+poisons the real viewfinder too.
+
+`YiCameraClient.claimStreamSession()` / `releaseStreamSession()` arbitrate:
+`DashboardView` claims on mount, `RTSPProbeView` is disabled while the claim is
+held and hands it back when `probe.isRunning` clears. **A probe that leaves the
+session claimed locks the viewfinder out for the rest of the connection**, so
+the release is driven by `onChange` and `onDisappear` rather than the success
+path alone.
+
+### Recording stops the viewfinder, and changes the encoder
+
+`RECORD_START` (513) is followed by `start_video_record` **and `vf_stop`** — the
+camera tears its RTSP server down for the duration. `isViewfinderActive` goes
+false, the player unmounts, and it remounts when recording ends. That cycle is
+normal, not an error; the stream must survive being restarted rather than
+treating the first `vf_stop` as fatal.
+
+**The SDP is not stable across that cycle.** Two `DESCRIBE`s either side of a
+recording returned `profile-level-id=4D401E` and then `4D4015` — the camera
+reconfigures its encoder, so parameter sets read once at connect go stale and
+the decoder renders garbage or nothing. `RTSPStream` therefore reconfigures from
+in-band SPS/PPS (`H264Depacketizer.noteParameterSets`) whenever they change,
+and only when they change, so a repeat on every IDR does not rebuild the format
+description.
+
 ### One request at a time, always
 
 **`sendRaw` serialises the control channel.** The camera answers one request at

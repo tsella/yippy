@@ -24,6 +24,17 @@ final class RTSPStream: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var framesDecoded = 0
 
+    /// Whether a stream is currently held open. The camera serves one RTSP
+    /// session at a time, so the debug probe must not run concurrently.
+    var isActive: Bool { task != nil }
+
+    /// Every handshake step is logged. A failure before the first frame is
+    /// otherwise invisible — the only previous output was on success, which
+    /// made a silent failure indistinguishable from never having started.
+    private func log(_ message: String) {
+        print("[rtsp-stream] \(message)")
+    }
+
     private var control: NWConnection?
     private var rtp: NWConnection?
     private var session: String?
@@ -31,6 +42,10 @@ final class RTSPStream: ObservableObject {
     private var keepAlive: Task<Void, Never>?
     private var depacketizer = H264Depacketizer()
     private weak var view: H264StreamLayerView?
+
+    /// What the layer is currently configured with, so repeated in-band
+    /// parameter sets only rebuild the format description when they change.
+    private var activeParameterSets: (sps: Data, pps: Data)?
 
     /// Frames carry a 90 kHz RTP timestamp; the layer wants seconds.
     private static let clockRate: Int32 = 90_000
@@ -40,14 +55,21 @@ final class RTSPStream: ObservableObject {
     }
 
     func start(url: URL) {
-        guard task == nil else { return }
+        guard task == nil else {
+            log("start ignored — already running")
+            return
+        }
+        log("start \(url.absoluteString)")
         state = .connecting
         framesDecoded = 0
         depacketizer = H264Depacketizer()
+        activeParameterSets = nil
         task = Task { await run(url: url) }
     }
 
     func stop() {
+        guard task != nil || control != nil else { return }
+        log("stop")
         keepAlive?.cancel(); keepAlive = nil
         task?.cancel(); task = nil
         if let session, let control {
@@ -58,6 +80,7 @@ final class RTSPStream: ObservableObject {
         session = nil
         control?.cancel(); control = nil
         rtp?.cancel(); rtp = nil
+        activeParameterSets = nil
         view?.reset()
         state = .idle
     }
@@ -71,6 +94,7 @@ final class RTSPStream: ObservableObject {
 
         // 1. RTSP control connection, pinned to Wi-Fi like every other socket
         //    — the camera's network has no route otherwise.
+        log("connecting to \(host):\(port)…")
         let control = NWConnection(host: NWEndpoint.Host(host),
                                    port: NWEndpoint.Port(rawValue: port)!,
                                    using: YiCameraClient.controlParameters())
@@ -78,28 +102,38 @@ final class RTSPStream: ObservableObject {
         do {
             try await Self.start(control)
         } catch {
+            log("✗ TCP connect failed: \(error.localizedDescription)")
             state = .failed("Could not reach the camera on port \(port).")
             return
         }
+        log("✓ TCP connected")
 
         // 2. DESCRIBE for the SDP.
+        log("→ DESCRIBE \(url.absoluteString)")
         guard let describe = await request("DESCRIBE", target: url.absoluteString,
                                            headers: ["Accept: application/sdp"]),
               case let sdp = Self.body(of: describe), !sdp.isEmpty else {
+            log("✗ DESCRIBE returned no SDP")
             state = .failed("The camera did not describe a stream.")
             return
         }
+        log("← \(Self.status(of: describe))")
 
         // 3. Configure the decoder from sprop-parameter-sets before any frame
         //    arrives, so the first IDR can be displayed rather than dropped.
         if let sets = H264Depacketizer.parameterSets(fromSDP: sdp) {
-            view?.configure(sps: sets.sps, pps: sets.pps)
+            log("SDP parameter sets: SPS \(sets.sps.count)B, PPS \(sets.pps.count)B")
+            configure(sps: sets.sps, pps: sets.pps)
+        } else {
+            log("⚠︎ no sprop-parameter-sets in SDP — waiting for in-band SPS/PPS")
         }
 
         let track = Self.trackURL(sdp: sdp, describe: describe, base: url)
         controlURL = track
+        log("track: \(track)")
 
-        // 4. Bind a local RTP port and SETUP. The camera only supports UDP.
+        // 4. Bind a local RTP port and SETUP. The camera only supports UDP:
+        //    it answers 461 for interleaved TCP, so there is no fallback to try.
         let rtpPort = UInt16.random(in: 20000...40000) & ~1
         let parameters = NWParameters.udp
         parameters.requiredInterfaceType = .wifi
@@ -111,25 +145,53 @@ final class RTSPStream: ObservableObject {
                                using: parameters)
         self.rtp = rtp
         rtp.start(queue: .global(qos: .userInitiated))
+        log("bound local UDP port \(rtpPort) for RTP")
 
+        log("→ SETUP (client_port=\(rtpPort)-\(rtpPort + 1))")
         guard let setup = await request(
             "SETUP", target: track,
             headers: ["Transport: RTP/AVP;unicast;client_port=\(rtpPort)-\(rtpPort + 1)"]
-        ), let id = Self.header("Session", in: setup)?
+        ) else {
+            log("✗ SETUP got no response")
+            state = .failed("The camera refused to set up the stream.")
+            return
+        }
+        log("← \(Self.status(of: setup))")
+        guard let id = Self.header("Session", in: setup)?
             .split(separator: ";").first.map(String.init) else {
+            log("✗ SETUP carried no Session header")
             state = .failed("The camera refused to set up the stream.")
             return
         }
         session = id
+        log("session \(id)")
 
         // 5. PLAY, then read RTP until cancelled.
-        guard await request("PLAY", target: track, headers: ["Session: \(id)"]) != nil else {
+        log("→ PLAY")
+        guard let play = await request("PLAY", target: track,
+                                       headers: ["Session: \(id)"]) else {
+            log("✗ PLAY got no response")
             state = .failed("The camera refused to start the stream.")
             return
         }
+        log("← \(Self.status(of: play))")
         state = .playing
         startKeepAlive(track: track, session: id)
         await readRTP(rtp)
+    }
+
+    /// Applies parameter sets to the layer, remembering them so an identical
+    /// in-band repeat does not rebuild the format description on every IDR.
+    private func configure(sps: Data, pps: Data) {
+        guard activeParameterSets?.sps != sps || activeParameterSets?.pps != pps else { return }
+        activeParameterSets = (sps, pps)
+        view?.configure(sps: sps, pps: pps)
+    }
+
+    private static func status(of message: String) -> String {
+        message.unicodeScalars
+            .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+            .first.map { String(String.UnicodeScalarView($0)) } ?? "(no status)"
     }
 
     /// The camera drops an idle RTSP session, so poke it periodically. Uses
@@ -146,18 +208,28 @@ final class RTSPStream: ObservableObject {
     }
 
     private func readRTP(_ connection: NWConnection) async {
+        var firstPacketLogged = false
         var firstFrameLogged = false
 
         while !Task.isCancelled {
             guard let datagram = try? await Self.receive(connection, max: 65536),
                   !datagram.isEmpty else { continue }
 
+            if !firstPacketLogged {
+                firstPacketLogged = true
+                log("✓ first RTP packet (\(datagram.count) bytes)")
+            }
+
             let units = depacketizer.handle(rtpPacket: datagram)
             guard !units.isEmpty else { continue }
 
-            // Parameter sets can also arrive in-band; honour them if the SDP
-            // did not carry any.
+            // Parameter sets also arrive in-band, and they change: the camera
+            // reconfigures its encoder when recording starts, so the SDP's
+            // sets go stale mid-session. Honour whatever the stream carries.
             depacketizer.noteParameterSets(from: units)
+            if let sets = depacketizer.parameterSets {
+                configure(sps: sets.sps, pps: sets.pps)
+            }
 
             let timestamp = Self.timestamp(of: datagram)
             let time = CMTime(value: CMTimeValue(timestamp), timescale: Self.clockRate)
@@ -166,9 +238,10 @@ final class RTSPStream: ObservableObject {
             framesDecoded += 1
             if !firstFrameLogged {
                 firstFrameLogged = true
-                print("[rtsp-stream] first frame decoded")
+                log("✓ first frame decoded")
             }
         }
+        log("RTP reader stopped after \(framesDecoded) frames")
     }
 
     private static func timestamp(of packet: Data) -> UInt32 {

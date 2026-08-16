@@ -79,9 +79,22 @@ struct DashboardView: View {
                     // Native RTSP/UDP path. VLC cannot play this camera: it
                     // refuses interleaved TCP (461) and live555 cannot resolve
                     // a local address for the UDP path on iOS.
+                    // One RTSP session exists on this firmware, so the
+                    // viewfinder claims it and the debug probe is locked out
+                    // while it is mounted.
                     H264StreamView(stream: stream)
-                        .onAppear { stream.start(url: client.streamURL) }
-                        .onDisappear { stream.stop() }
+                        .onAppear {
+                            // The camera stops the viewfinder while recording,
+                            // so this remounts on every record cycle. Claiming
+                            // is idempotent for the stream itself, which owns
+                            // the session for as long as it is running.
+                            guard stream.isActive || client.claimStreamSession() else { return }
+                            stream.start(url: client.streamURL)
+                        }
+                        .onDisappear {
+                            stream.stop()
+                            client.releaseStreamSession()
+                        }
 
                     if case .failed(let reason) = stream.state {
                         VStack(spacing: 12) {
@@ -96,6 +109,7 @@ struct DashboardView: View {
                                 stream.stop()
                                 stream.start(url: client.streamURL)
                             }
+                            .accessibilityLabel("Retry stream")
                             .buttonStyle(.bordered)
                             .tint(.white)
                         }

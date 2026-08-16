@@ -78,6 +78,24 @@ class YiCameraClient: ObservableObject {
     /// cannot — the camera sends one spontaneously on connect.
     private var viewfinderRequested = false
 
+    /// True while something holds the camera's RTSP session.
+    ///
+    /// **The firmware serves one RTSP session at a time.** The viewfinder and
+    /// the debug probe both take it, and whichever loses gets a refused SETUP
+    /// on a half-closed socket — observed as `461` followed by
+    /// `error 96 - No message available on STREAM`. They must be exclusive.
+    @Published private(set) var isStreamSessionHeld = false
+
+    func claimStreamSession() -> Bool {
+        guard !isStreamSessionHeld else { return false }
+        isStreamSessionHeld = true
+        return true
+    }
+
+    func releaseStreamSession() {
+        isStreamSessionHeld = false
+    }
+
     /// True between `start_photo_capture` and the capture finishing.
     ///
     /// The camera is single-threaded while it writes a photo: sending another

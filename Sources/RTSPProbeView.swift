@@ -13,11 +13,24 @@ struct RTSPProbeView: View {
         }
         .navigationTitle("RTSP Probe")
         .navigationBarTitleDisplayMode(.inline)
+        // The probe owns the camera's single RTSP session while it runs;
+        // hand it back the moment it finishes, however it finished.
+        .onChange(of: probe.isRunning) { running in
+            if !running { client.releaseStreamSession() }
+        }
+        .onDisappear {
+            probe.cancel()
+            client.releaseStreamSession()
+        }
     }
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Speaks RTSP directly — OPTIONS, DESCRIBE, SETUP, PLAY — over a Wi-Fi-pinned socket, bypassing VLC entirely. Requests interleaved TCP, so no UDP bind is needed.")
+            Text("Speaks RTSP directly — OPTIONS, DESCRIBE, SETUP, PLAY — over a Wi-Fi-pinned socket. The camera refuses interleaved TCP (461), so the probe falls back to a UDP bind, same as the viewfinder.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("The camera serves one RTSP session at a time, so this is unavailable while the viewfinder is live.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -33,10 +46,11 @@ struct RTSPProbeView: View {
                     ProgressView().padding(.leading, 8)
                 } else {
                     Button("Run Probe") {
+                        guard client.claimStreamSession() else { return }
                         probe.run(url: client.streamURL)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!client.isConnected)
+                    .disabled(!client.isConnected || client.isStreamSessionHeld)
                 }
 
                 Spacer()
@@ -51,6 +65,10 @@ struct RTSPProbeView: View {
 
             if !client.isConnected {
                 Text("Camera must be connected.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if client.isStreamSessionHeld && !probe.isRunning {
+                Text("The viewfinder holds the stream session. Leave the dashboard first.")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
