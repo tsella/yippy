@@ -55,17 +55,20 @@ struct RTSPPlayerView: UIViewRepresentable {
             // "--rtsp-tcp" must be set here — as a media option it is silently
             // ignored, leaving live555 to attempt a UDP bind that fails with
             // "invalid IP address: 0.0.0.0" on this gateway-less network.
+            // Boolean options use the --option / --no-option form; passing
+            // "=0" to one makes VLC reject the whole argument list and abort
+            // before the player exists. Every option here is verified against
+            // the shipped MobileVLCKit build.
             let player = VLCMediaPlayer(options: [
                 "--rtsp-tcp",
-                "--rtsp-http=0",
-                // Prefer the built-in RTSP demuxer over the live555 module,
-                // which is the component that cannot resolve a source address.
+                // Not HTTP tunnelling — that is a different transport.
+                "--no-rtsp-http",
+                // No multicast on a point-to-point camera link.
                 "--no-rtsp-mcast",
                 "--network-caching=300",
                 "--live-caching=300",
                 "--clock-jitter=0",
                 "--clock-synchro=0",
-                "--ipv4",
             ])
             player.drawable = view
             player.delegate = self

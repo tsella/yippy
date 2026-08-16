@@ -70,6 +70,17 @@ That message is a *symptom of the missing 259*, not a VLC or network bug — the
 player is dialing a server that was never started. `260` stops the stream again
 and re-enables the physical shutter button on some firmwares.
 
+**A bad VLC option aborts the player before it exists.** `VLCMediaPlayer(options:)`
+validates the whole list at library init: one unknown option or one boolean
+given `=value` and `libvlc_media_player_new` fails, taking the viewfinder with
+it. Boolean options take `--x` / `--no-x` (`--rtsp-http=0` is rejected;
+`--no-rtsp-http` is correct), and `--ipv4` no longer exists in this build.
+Verify any new option against the shipped framework before adding it:
+
+```bash
+strings Pods/MobileVLCKit/MobileVLCKit.xcframework/ios-arm64_armv7_armv7s/MobileVLCKit.framework/MobileVLCKit | grep -x '<option>'
+```
+
 The `START_SESSION` (257) response advertises the stream URL in its `rtsp`
 field; prefer it over hardcoding. Track liveness via the `vf_start`/`vf_stop`
 notifications and only mount the player while the viewfinder is active.
