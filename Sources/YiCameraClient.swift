@@ -546,8 +546,17 @@ class YiCameraClient: ObservableObject {
         if let range = raw.range(of: #"^/tmp/fuse_[a-z]/"#, options: [.regularExpression, .caseInsensitive]) {
             paths.append(String(raw[range.upperBound...]))
         }
-        paths.append((raw as NSString).lastPathComponent)
+        let filename = (raw as NSString).lastPathComponent
+        paths.append(filename)
         paths.append(String(raw.drop { $0 == "/" }))
+        // The reported name and the name on disk can differ — a manual browse
+        // of /tmp/fuse_z found `logo.jpg` where the field says `app_logo.jpg`.
+        // Try the other spelling rather than failing on a naming mismatch.
+        if filename.hasPrefix("app_") {
+            paths.append(String(filename.dropFirst("app_".count)))
+        } else {
+            paths.append("app_\(filename)")
+        }
 
         var seen = Set<String>()
         return paths.compactMap { path in
