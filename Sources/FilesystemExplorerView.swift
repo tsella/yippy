@@ -122,11 +122,23 @@ struct FilesystemExplorerView: View {
             } else {
                 ForEach(grouped.keys.sorted(), id: \.self) { level in
                     Section("Depth \(level)") {
-                        // Every row is tappable — directory detection from a
-                        // listing is unreliable, so don't gate navigation on it.
+                        // Route by the camera's own directory marker, so
+                        // tapping a file does not cost a pointless listing.
                         ForEach(grouped[level] ?? []) { entry in
                             NavigationLink {
-                                DirectoryBrowserView(client: client, fileManager: fileManager, path: entry.path)
+                                if entry.isMarkedDirectory {
+                                    DirectoryBrowserView(client: client, fileManager: fileManager,
+                                                         path: entry.path)
+                                } else if entry.isImage {
+                                    RemoteImageView(path: entry.path, name: entry.name)
+                                } else {
+                                    RemoteFileView(entry: entry) {
+                                        fileManager.downloadFile(
+                                            YiFile(name: entry.name, path: entry.path,
+                                                   size: entry.size, date: nil)
+                                        )
+                                    }
+                                }
                             } label: {
                                 row(entry)
                             }

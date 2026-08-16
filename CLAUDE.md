@@ -337,6 +337,12 @@ Observed on real hardware, not documented upstream:
   Verified by comparing a working browse against one that died on the first
   `LIST_DIRECTORY` after the slash was trimmed. Trim it for *display* only —
   `Entry.name` is trimmed, `Entry.path` is not.
+- **Don't list a path that is not a directory.** The camera answers `-26`,
+  which is harmless but costs a round trip on a channel that must stay quiet.
+  Route on the trailing-slash marker: marked → browse, image extension →
+  viewer, anything else with a size → file detail. When an entry is genuinely
+  ambiguous (no marker, no size), try listing it and treat `-26` as the
+  classification — `DirectoryBrowserView` falls back to showing it as a file.
 - **Never gate navigation on `isDirectory`.** A listing cannot reliably identify
   a directory: on Linux they usually report a real block size (`4096 bytes`),
   which is indistinguishable from a file. Gating `NavigationLink` on it made

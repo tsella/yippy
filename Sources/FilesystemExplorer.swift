@@ -31,12 +31,17 @@ final class FilesystemExplorer: ObservableObject {
         let size: Int64
         let depth: Int
 
-        /// Whether this entry can be fetched from the camera's HTTP server.
-        var isDownloadable: Bool { !isMarkedDirectory }
+        private var fileExtension: String {
+            (name as NSString).pathExtension.lowercased()
+        }
 
         var isImage: Bool {
-            ["jpg", "jpeg", "png", "bmp", "gif", "thm"]
-                .contains((name as NSString).pathExtension.lowercased())
+            ["jpg", "jpeg", "png", "bmp", "gif", "thm"].contains(fileExtension)
+        }
+
+        /// Whether the photo library would plausibly accept this file.
+        var isMedia: Bool {
+            isImage || ["mp4", "mov", "avi"].contains(fileExtension)
         }
     }
 
