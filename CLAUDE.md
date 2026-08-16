@@ -194,6 +194,25 @@ images and downloads never arrive.
 
 Scope it to the camera's address. Do not set `NSAllowsArbitraryLoads`.
 
+## Thumbnail cache
+
+Thumbnails persist to `Caches/Thumbnails/<cameraID>/` via `ThumbnailCache`, so
+the gallery repopulates on launch without touching the camera. Every miss costs
+an HTTP fetch over the camera's slow link — and for video, a sidecar download
+plus a frame decode.
+
+- **Partitioned per camera.** The camera restarts numbering at `YDXJ0001` on
+  each fresh card, so a cache keyed by filename alone would serve one camera's
+  thumbnail for another's file. `YiCameraClient.cameraID` prefers the serial
+  number from `GET_DEVICE_INFO` and falls back to brand+model+firmware; it is
+  sanitised because it is used as a path component.
+- **Keyed by name + size + timestamp**, so a recycled filename with different
+  content misses rather than showing the previous file's image.
+- **Evicted after a full listing.** Once `listFiles()` completes, the listing is
+  authoritative: anything cached for that camera and not in it refers to deleted
+  media. Deleting a file also drops its entry immediately. A 128 MB ceiling
+  trims oldest-first.
+
 ## Downloads
 
 Media downloaded from the camera goes to the **camera roll** via

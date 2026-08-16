@@ -78,8 +78,20 @@ final class ThumbnailLoader: ObservableObject {
         if let hit = cache.object(forKey: key as NSString) { return hit }
         if let existing = inFlight[key] { return await existing.value }
 
+        let cameraID = self.cameraID
         let task = Task { [weak self] () -> UIImage? in
             guard let self else { return nil }
+
+            // Disk cache before the network: a hit costs a file read instead
+            // of an HTTP fetch over the camera's slow link (and, for video, a
+            // sidecar download plus a frame decode).
+            if let cached = await ThumbnailCache.shared.image(for: file, cameraID: cameraID) {
+                self.cache.setObject(cached, forKey: key as NSString,
+                                     cost: Int(cached.size.width * cached.size.height * 4))
+                self.inFlight[key] = nil
+                return cached
+            }
+
             await self.acquireSlot()
             defer { self.releaseSlot(); self.inFlight[key] = nil }
 
@@ -91,11 +103,23 @@ final class ThumbnailLoader: ObservableObject {
             guard let image else { return nil }
             self.cache.setObject(image, forKey: key as NSString,
                                  cost: Int(image.size.width * image.size.height * 4))
+            await ThumbnailCache.shared.store(image, for: file, cameraID: cameraID)
             return image
         }
 
         inFlight[key] = task
         return await task.value
+    }
+
+    /// Which camera's cache partition to use. Set on connect.
+    private var cameraID = "unknown-camera"
+
+    func setCameraID(_ id: String) {
+        guard id != cameraID else { return }
+        cameraID = id
+        // Memory cache is keyed by path alone, so it must not survive a switch
+        // to a different camera with the same filenames.
+        cache.removeAllObjects()
     }
 
     /// Photo preview: the `.THM` sidecar, or the original if there is none.

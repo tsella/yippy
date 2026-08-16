@@ -76,6 +76,13 @@ class YiCameraClient: ObservableObject {
     /// default if the firmware does not report one.
     @Published private(set) var streamURL = URL(string: "rtsp://192.168.42.1/live")!
 
+    /// Identifies *which* camera this is, so caches can be kept per device.
+    ///
+    /// Prefers the serial number and falls back to model+firmware. Filenames
+    /// restart at YDXJ0001 on every card, so a cache keyed by filename alone
+    /// would serve one camera's thumbnails for another's files.
+    @Published private(set) var cameraID: String = "unknown-camera"
+
     /// Incremented whenever the camera reports that new media was written.
     /// Views observe this to refresh without polling — the camera pushes
     /// `photo_taken` / `video_record_complete` notifications on capture.
@@ -468,6 +475,7 @@ class YiCameraClient: ObservableObject {
                 streamURL = url
             }
             try await refreshBatteryLevel()
+            await identifyCamera()
 
             // The camera has no battery-backed RTC, so its clock drifts or
             // resets entirely. Sync it before anything is captured this
@@ -482,6 +490,40 @@ class YiCameraClient: ObservableObject {
             print("Authentication failed: \(error.localizedDescription)")
             showBanner("Camera handshake failed", isError: true)
         }
+    }
+
+    /// Derives a stable per-device identifier from GET_DEVICE_INFO.
+    ///
+    /// Best-effort: a camera that reports nothing usable keeps the default, so
+    /// caching still works — it just cannot be told apart from another
+    /// equally anonymous camera.
+    private func identifyCamera() async {
+        guard let info = try? await send(.getDeviceInfo) else { return }
+
+        // Serial number first; it is the only genuinely unique field.
+        for key in ["sn", "serial_number", "serialno"] {
+            if let value = info[key].map({ "\($0)" }),
+               !value.isEmpty, value != "0" {
+                cameraID = sanitised(value)
+                return
+            }
+        }
+
+        // Otherwise model + firmware. Not unique across two identical cameras,
+        // but better than lumping different models together.
+        let fallback = ["brand", "model", "fw_ver"]
+            .compactMap { info[$0].map { "\($0)" } }
+            .filter { !$0.isEmpty }
+        if !fallback.isEmpty {
+            cameraID = sanitised(fallback.joined(separator: "-"))
+        }
+    }
+
+    /// Keeps the id safe for use as a filename component.
+    private func sanitised(_ raw: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let cleaned = raw.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" }
+        return String(cleaned).prefix(64).description
     }
 
     /// Starts the camera's RTSP server (AMBA_BOSS_RESETVF).
