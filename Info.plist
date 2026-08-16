@@ -10,10 +10,10 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleDisplayName</key>
 	<string>Yippy!</string>
+	<key>CFBundleName</key>
+	<string>Yippy</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -23,7 +23,7 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Connect to the Xiaomi Yi Action Camera.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Save downloaded photos to your library.</string>
+	<string>Save photos and videos downloaded from your camera to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

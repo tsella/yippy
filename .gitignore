@@ -89,13 +89,8 @@ iOSInjectionProject/
 #
 .DS_Store
 
-# XcodeGen
-#
-# Since we use xcodegen, it's common to ignore the .xcodeproj since it is generated on the fly.
-# But we'll leave it out of gitignore so the user can just push everything if they want.
-# Actually, since CocoaPods creates the workspace, let's ignore the project and workspace
-# Wait, if we ignore .xcodeproj, CocoaPods workspace won't open properly on another machine without running xcodegen.
-# This is standard for xcodegen: you check in project.yml and run xcodegen -> pod install.
-# Let's ignore them:
-*.xcodeproj
-*.xcworkspace
+# The .xcodeproj and .xcworkspace are the source of truth and are tracked.
+# (This project no longer uses XcodeGen — edit the project in Xcode directly.)
+# Only per-user state inside them is ignored:
+xcuserdata/
+*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist

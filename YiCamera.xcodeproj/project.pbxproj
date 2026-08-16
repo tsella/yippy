@@ -1,0 +1,469 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		05594D9558C561F26793BB68 /* DebugScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0AA3C31053E6B5328CC350 /* DebugScannerView.swift */; };
+		0DAB07E2BDB5F998AC869452 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BF6E48C582A08A7F419201 /* ContentView.swift */; };
+		188B744FA93EE9BF180C136F /* AmbarellaProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46DE48B702625215760DA914 /* AmbarellaProtocol.swift */; };
+		2619167C96544D2BDF7A1562 /* YiCameraClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC034362676E0A6C69CCFC9 /* YiCameraClient.swift */; };
+		2BC7F7FED101312F5A192784 /* YiCameraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 883499D348C4B9A7B24457F9 /* YiCameraApp.swift */; };
+		2FEF1B7E58DEC124C7328E01 /* ConnectionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04A51F89E5FDBB57DAAA836B /* ConnectionWizardView.swift */; };
+		402CA5DA13290DD1946CB28E /* CameraSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A412C540BA2156818B49EE9F /* CameraSettingsView.swift */; };
+		5268C4AC8711904F8A9C08AD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E321081365BC432AED1F02B /* SettingsView.swift */; };
+		6514808DDCA5B736F72BDB14 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1EE1BE6695B44B76AD53E06 /* DashboardView.swift */; };
+		6CA7BB44303AEE4DBD5373FB /* FilesystemExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C98BACB6F7D7E8EC5A182C /* FilesystemExplorer.swift */; };
+		7A353AB11810A8CC7B6B289B /* MediaGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */; };
+		7EC3EF958358652F3A1DB18C /* RTSPPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FABD929DABAFE4C0019A96A2 /* RTSPPlayerView.swift */; };
+		87C7B784C91A8AF62F28A03E /* DirectoryBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671753AA31C7C94F62615B93 /* DirectoryBrowserView.swift */; };
+		88E443CAC288BDA7F0AC6E58 /* ConfirmationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14421FCF5C9AD1BE6B2EA6B2 /* ConfirmationOverlay.swift */; };
+		89E34CAA8E40839A46CE92AD /* ThumbnailLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B0D6706E9F21C6DBED83E1 /* ThumbnailLoader.swift */; };
+		AAD62EAD484F7F70B9813C2B /* Pods_YiCamera.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26A2D7AE8BE04A318C23C989 /* Pods_YiCamera.framework */; };
+		C6B363D1324C9B1748CEAD2B /* YiFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D9963AC4352A77659468007 /* YiFileManager.swift */; };
+		D02716A320B8777792B20318 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FBACEADC17BB02EAED492583 /* Assets.xcassets */; };
+		DD51930D8FADE26C2C954846 /* FilesystemExplorerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39DB018D649AD4FF4A918AB /* FilesystemExplorerView.swift */; };
+		E5A9E8F9A117050CDFB86C84 /* MediaDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C03CA163D76352321562BB /* MediaDetailView.swift */; };
+		F9713D0E111A2AD68FA7F3CF /* PhotoLibrarySaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635756632B5C6973919E67A1 /* PhotoLibrarySaver.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3E990180DF784767B4492371 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0AC138F42D5CFAE6FB03A541 /* Pods.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = C90AEB93CDC76060F51EBAE38B68120D;
+			remoteInfo = "Pods-YiCamera";
+		};
+		77172F97DCE27A2E63CB4179 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0AC138F42D5CFAE6FB03A541 /* Pods.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = DED4D3CD643E122A02463D87FD24CE3F;
+			remoteInfo = "Pods-YiCamera";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		04A51F89E5FDBB57DAAA836B /* ConnectionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionWizardView.swift; sourceTree = "<group>"; };
+		08BF6E48C582A08A7F419201 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		0AC138F42D5CFAE6FB03A541 /* Pods */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = Pods; path = Pods/Pods.xcodeproj; sourceTree = "<group>"; };
+		0CC034362676E0A6C69CCFC9 /* YiCameraClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiCameraClient.swift; sourceTree = "<group>"; };
+		14421FCF5C9AD1BE6B2EA6B2 /* ConfirmationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmationOverlay.swift; sourceTree = "<group>"; };
+		23C98BACB6F7D7E8EC5A182C /* FilesystemExplorer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FilesystemExplorer.swift; path = FilesystemExplorer.swift; sourceTree = "<group>"; };
+		2BEA5EE6BEB0821F07C11A4D /* YiCamera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YiCamera.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2D9963AC4352A77659468007 /* YiFileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiFileManager.swift; sourceTree = "<group>"; };
+		2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGalleryView.swift; sourceTree = "<group>"; };
+		46DE48B702625215760DA914 /* AmbarellaProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbarellaProtocol.swift; sourceTree = "<group>"; };
+		50BC81AA1F6746540BD574A2 /* Pods-YiCamera.release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Pods-YiCamera.release.xcconfig"; sourceTree = "<group>"; };
+		635756632B5C6973919E67A1 /* PhotoLibrarySaver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PhotoLibrarySaver.swift; path = PhotoLibrarySaver.swift; sourceTree = "<group>"; };
+		671753AA31C7C94F62615B93 /* DirectoryBrowserView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DirectoryBrowserView.swift; path = DirectoryBrowserView.swift; sourceTree = "<group>"; };
+		6E321081365BC432AED1F02B /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		74B0D6706E9F21C6DBED83E1 /* ThumbnailLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ThumbnailLoader.swift; path = ThumbnailLoader.swift; sourceTree = "<group>"; };
+		84C03CA163D76352321562BB /* MediaDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MediaDetailView.swift; path = MediaDetailView.swift; sourceTree = "<group>"; };
+		883499D348C4B9A7B24457F9 /* YiCameraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiCameraApp.swift; sourceTree = "<group>"; };
+		8B0AA3C31053E6B5328CC350 /* DebugScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugScannerView.swift; sourceTree = "<group>"; };
+		A1EE1BE6695B44B76AD53E06 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		A412C540BA2156818B49EE9F /* CameraSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraSettingsView.swift; path = CameraSettingsView.swift; sourceTree = "<group>"; };
+		AAB77ACF6B8F4024BB321562 /* Pods-YiCamera.debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Pods-YiCamera.debug.xcconfig"; sourceTree = "<group>"; };
+		D39DB018D649AD4FF4A918AB /* FilesystemExplorerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FilesystemExplorerView.swift; path = FilesystemExplorerView.swift; sourceTree = "<group>"; };
+		FABD929DABAFE4C0019A96A2 /* RTSPPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RTSPPlayerView.swift; sourceTree = "<group>"; };
+		FBACEADC17BB02EAED492583 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		55E1E2B1EC2D1AAF24359D2B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAD62EAD484F7F70B9813C2B /* Pods_YiCamera.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		18FD2E9F1CF2CD2489382650 /* Projects */ = {
+			isa = PBXGroup;
+			children = (
+				0AC138F42D5CFAE6FB03A541 /* Pods */,
+			);
+			name = Projects;
+			sourceTree = "<group>";
+		};
+		325977161F2EA037CEA6294E /* Pods-YiCamera */ = {
+			isa = PBXGroup;
+			children = (
+				AAB77ACF6B8F4024BB321562 /* Pods-YiCamera.debug.xcconfig */,
+				50BC81AA1F6746540BD574A2 /* Pods-YiCamera.release.xcconfig */,
+			);
+			name = "Pods-YiCamera";
+			path = "Pods/Target Support Files/Pods-YiCamera";
+			sourceTree = "<group>";
+		};
+		4D435141275FA2A79717FDC4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2BEA5EE6BEB0821F07C11A4D /* YiCamera.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		53979EA49F1BBAA11CD97475 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				26A2D7AE8BE04A318C23C989 /* Pods_YiCamera.framework */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E825F503AF487E271E231AC3 = {
+			isa = PBXGroup;
+			children = (
+				325977161F2EA037CEA6294E /* Pods-YiCamera */,
+				F31067FE14F30EC6D037CA8C /* Sources */,
+				4D435141275FA2A79717FDC4 /* Products */,
+				18FD2E9F1CF2CD2489382650 /* Projects */,
+			);
+			sourceTree = "<group>";
+		};
+		F31067FE14F30EC6D037CA8C /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				46DE48B702625215760DA914 /* AmbarellaProtocol.swift */,
+				FBACEADC17BB02EAED492583 /* Assets.xcassets */,
+				14421FCF5C9AD1BE6B2EA6B2 /* ConfirmationOverlay.swift */,
+				04A51F89E5FDBB57DAAA836B /* ConnectionWizardView.swift */,
+				08BF6E48C582A08A7F419201 /* ContentView.swift */,
+				A1EE1BE6695B44B76AD53E06 /* DashboardView.swift */,
+				8B0AA3C31053E6B5328CC350 /* DebugScannerView.swift */,
+				2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */,
+				FABD929DABAFE4C0019A96A2 /* RTSPPlayerView.swift */,
+				6E321081365BC432AED1F02B /* SettingsView.swift */,
+				883499D348C4B9A7B24457F9 /* YiCameraApp.swift */,
+				0CC034362676E0A6C69CCFC9 /* YiCameraClient.swift */,
+				2D9963AC4352A77659468007 /* YiFileManager.swift */,
+				23C98BACB6F7D7E8EC5A182C /* FilesystemExplorer.swift */,
+				D39DB018D649AD4FF4A918AB /* FilesystemExplorerView.swift */,
+				671753AA31C7C94F62615B93 /* DirectoryBrowserView.swift */,
+				74B0D6706E9F21C6DBED83E1 /* ThumbnailLoader.swift */,
+				A412C540BA2156818B49EE9F /* CameraSettingsView.swift */,
+				635756632B5C6973919E67A1 /* PhotoLibrarySaver.swift */,
+				84C03CA163D76352321562BB /* MediaDetailView.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		49BA7A020233E82EB8FA3407 /* YiCamera */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A49036B6E7D7BC10CCEEED37 /* Build configuration list for PBXNativeTarget "YiCamera" */;
+			buildPhases = (
+				7E5C884756CA87896CBC72C4 /* Sources */,
+				8D9AAED76D6BCEFF963EDF94 /* Resources */,
+				55E1E2B1EC2D1AAF24359D2B /* Frameworks */,
+				5CEA62EC5F104B518D6AD86B /* [CP] Embed Pods Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9E807022DEEC40027397695B /* PBXTargetDependency */,
+			);
+			name = YiCamera;
+			productName = YiCamera;
+			productReference = 2BEA5EE6BEB0821F07C11A4D /* YiCamera.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		45F06D5532771B74F8D8957F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = C347738A6C36D7249ED1D428 /* Build configuration list for PBXProject "YiCamera" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = E825F503AF487E271E231AC3;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 4D435141275FA2A79717FDC4 /* Products */;
+			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 53979EA49F1BBAA11CD97475 /* Products */;
+					ProjectRef = 0AC138F42D5CFAE6FB03A541 /* Pods */;
+				},
+			);
+			projectRoot = "";
+			targets = (
+				49BA7A020233E82EB8FA3407 /* YiCamera */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXReferenceProxy section */
+		26A2D7AE8BE04A318C23C989 /* Pods_YiCamera.framework */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.framework;
+			path = Pods_YiCamera.framework;
+			remoteRef = 3E990180DF784767B4492371 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+/* End PBXReferenceProxy section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8D9AAED76D6BCEFF963EDF94 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D02716A320B8777792B20318 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		5CEA62EC5F104B518D6AD86B /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-YiCamera/Pods-YiCamera-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-YiCamera/Pods-YiCamera-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-YiCamera/Pods-YiCamera-frameworks.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7E5C884756CA87896CBC72C4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				188B744FA93EE9BF180C136F /* AmbarellaProtocol.swift in Sources */,
+				88E443CAC288BDA7F0AC6E58 /* ConfirmationOverlay.swift in Sources */,
+				2FEF1B7E58DEC124C7328E01 /* ConnectionWizardView.swift in Sources */,
+				0DAB07E2BDB5F998AC869452 /* ContentView.swift in Sources */,
+				6514808DDCA5B736F72BDB14 /* DashboardView.swift in Sources */,
+				05594D9558C561F26793BB68 /* DebugScannerView.swift in Sources */,
+				7A353AB11810A8CC7B6B289B /* MediaGalleryView.swift in Sources */,
+				7EC3EF958358652F3A1DB18C /* RTSPPlayerView.swift in Sources */,
+				5268C4AC8711904F8A9C08AD /* SettingsView.swift in Sources */,
+				2BC7F7FED101312F5A192784 /* YiCameraApp.swift in Sources */,
+				2619167C96544D2BDF7A1562 /* YiCameraClient.swift in Sources */,
+				C6B363D1324C9B1748CEAD2B /* YiFileManager.swift in Sources */,
+				6CA7BB44303AEE4DBD5373FB /* FilesystemExplorer.swift in Sources */,
+				DD51930D8FADE26C2C954846 /* FilesystemExplorerView.swift in Sources */,
+				87C7B784C91A8AF62F28A03E /* DirectoryBrowserView.swift in Sources */,
+				89E34CAA8E40839A46CE92AD /* ThumbnailLoader.swift in Sources */,
+				402CA5DA13290DD1946CB28E /* CameraSettingsView.swift in Sources */,
+				F9713D0E111A2AD68FA7F3CF /* PhotoLibrarySaver.swift in Sources */,
+				E5A9E8F9A117050CDFB86C84 /* MediaDetailView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9E807022DEEC40027397695B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "Pods-YiCamera";
+			targetProxy = 77172F97DCE27A2E63CB4179 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		6D43630BF52F256D2EA29FFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 50BC81AA1F6746540BD574A2 /* Pods-YiCamera.release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = RUD2L7H988;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = la.tsel.yippy;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		90642DDED1346FA5D9462CCB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C7B0CFBA0994C21B2406BA76 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		DB76FCB86B75B9D2CD03ABDD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AAB77ACF6B8F4024BB321562 /* Pods-YiCamera.debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = RUD2L7H988;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = la.tsel.yippy;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A49036B6E7D7BC10CCEEED37 /* Build configuration list for PBXNativeTarget "YiCamera" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DB76FCB86B75B9D2CD03ABDD /* Debug */,
+				6D43630BF52F256D2EA29FFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C347738A6C36D7249ED1D428 /* Build configuration list for PBXProject "YiCamera" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C7B0CFBA0994C21B2406BA76 /* Debug */,
+				90642DDED1346FA5D9462CCB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 45F06D5532771B74F8D8957F /* Project object */;
+}
