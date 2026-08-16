@@ -6,7 +6,26 @@ struct MediaGalleryView: View {
     @State private var fileToDelete: YiFile?
     @State private var selectedFile: YiFile?
 
+    /// Multi-select mode. `nil` means normal browsing; a non-nil set means the
+    /// selection bar is up, even when the set is empty (the user can uncheck
+    /// everything without leaving the mode).
+    @State private var selection: Set<String>?
+    @State private var confirmingBatchDelete = false
+
     private let columns = [GridItem(.adaptive(minimum: 100, maximum: 150), spacing: 16)]
+
+    private var isSelecting: Bool { selection != nil }
+
+    private func toggle(_ file: YiFile) {
+        guard var current = selection else { return }
+        if current.contains(file.id) { current.remove(file.id) } else { current.insert(file.id) }
+        selection = current
+    }
+
+    private var selectedFiles: [YiFile] {
+        guard let selection else { return [] }
+        return fileManager.files.filter { selection.contains($0.id) }
+    }
 
     var body: some View {
         Group {
@@ -19,7 +38,10 @@ struct MediaGalleryView: View {
                 grid
             }
         }
-        .navigationTitle("Gallery")
+        .navigationTitle(isSelecting ? "\(selectedFiles.count) Selected" : "Gallery")
+        .safeAreaInset(edge: .top) {
+            if isSelecting { selectionBar }
+        }
         .task {
             // Only load on first appearance; pull-to-refresh handles the rest.
             if fileManager.files.isEmpty { await fileManager.listFiles() }
@@ -30,6 +52,22 @@ struct MediaGalleryView: View {
             Task { await fileManager.listFiles() }
         }
         .overlay { downloadOverlay }
+        .overlay {
+            if fileManager.isDeleting {
+                ZStack {
+                    Color.black.opacity(0.3).ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        ProgressView(value: fileManager.deleteProgress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 180)
+                        Text("Deleting…")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                }
+            }
+        }
         .fullScreenCover(item: $selectedFile) { file in
             MediaDetailView(file: file) {
                 Task { await fileManager.deleteFile(file) }
@@ -48,6 +86,18 @@ struct MediaGalleryView: View {
             if let file = fileToDelete {
                 Task { await fileManager.deleteFile(file) }
             }
+        }
+        .confirmation(
+            isPresented: $confirmingBatchDelete,
+            title: selectedFiles.count == 1
+                ? "Delete \(selectedFiles.first?.name ?? "file")?"
+                : "Delete \(selectedFiles.count) files?",
+            message: "This permanently removes \(selectedFiles.count == 1 ? "it" : "them") from the camera's SD card.",
+            confirmTitle: "Delete"
+        ) {
+            let targets = selectedFiles
+            withAnimation { selection = nil }
+            Task { await fileManager.deleteFiles(targets) }
         }
         .alert("Error", isPresented: .init(get: { fileManager.errorMessage != nil },
                                            set: { if !$0 { fileManager.errorMessage = nil } })) {
@@ -94,6 +144,28 @@ struct MediaGalleryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// Delete / Cancel bar shown above the grid while selecting.
+    private var selectionBar: some View {
+        HStack {
+            Button("Cancel") {
+                withAnimation { selection = nil }
+            }
+
+            Spacer()
+
+            Button(role: .destructive) {
+                confirmingBatchDelete = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+                    .fontWeight(.semibold)
+            }
+            .disabled(selectedFiles.isEmpty)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .background(.bar)
+    }
+
     private var grid: some View {
         ScrollView {
             // Photos are 4:3 and videos 16:9, so cells in a row differ in
@@ -101,14 +173,44 @@ struct MediaGalleryView: View {
             // row height, which would detach the caption from its thumbnail.
             LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
                 ForEach(fileManager.files) { file in
-                    MediaCard(file: file) {
+                    MediaCard(
+                        file: file,
+                        isSelecting: isSelecting,
+                        isSelected: selection?.contains(file.id) ?? false
+                    ) {
                         fileManager.downloadFile(file)
                     } onDelete: {
                         fileToDelete = file
                     } onOpen: {
-                        selectedFile = file
+                        if isSelecting {
+                            toggle(file)
+                        } else {
+                            selectedFile = file
+                        }
+                    } onBeginSelection: {
+                        // Long press starts selection with this file checked.
+                        withAnimation { selection = [file.id] }
                     }
                     .frame(maxHeight: .infinity, alignment: .top)
+                    .contextMenu {
+                        if !isSelecting {
+                            Button {
+                                withAnimation { selection = [file.id] }
+                            } label: {
+                                Label("Select", systemImage: "checkmark.circle")
+                            }
+                            Button {
+                                fileManager.downloadFile(file)
+                            } label: {
+                                Label("Save to Photos", systemImage: "square.and.arrow.down")
+                            }
+                            Button(role: .destructive) {
+                                fileToDelete = file
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
             }
             .padding()
@@ -145,15 +247,39 @@ struct MediaGalleryView: View {
 
 struct MediaCard: View {
     let file: YiFile
+    var isSelecting = false
+    var isSelected = false
     let onDownload: () -> Void
     let onDelete: () -> Void
     var onOpen: (() -> Void)?
+    var onBeginSelection: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ThumbnailView(file: file)
+                .overlay(alignment: .topTrailing) {
+                    if isSelecting {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 22))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(isSelected ? .white : .white.opacity(0.9),
+                                             isSelected ? Color.accentColor : .black.opacity(0.35))
+                            .shadow(radius: 2)
+                            .padding(6)
+                    }
+                }
+                .overlay {
+                    if isSelecting && isSelected {
+                        Color.accentColor.opacity(0.25)
+                    }
+                }
                 .contentShape(Rectangle())
                 .onTapGesture { onOpen?() }
+                .onLongPressGesture {
+                    guard !isSelecting else { return }
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onBeginSelection?()
+                }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(file.name)

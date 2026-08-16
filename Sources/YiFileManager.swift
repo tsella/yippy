@@ -108,6 +108,8 @@ class YiFileManager: ObservableObject {
     @Published var errorMessage: String?
     /// Set after a successful save so the UI can confirm where the file went.
     @Published var savedMessage: String?
+    @Published private(set) var isDeleting = false
+    @Published private(set) var deleteProgress: Double = 0
 
     private let client: YiCameraClient
     private var downloadTask: Task<Void, Never>?
@@ -226,23 +228,49 @@ class YiFileManager: ObservableObject {
     // MARK: - Mutation
 
     func deleteFile(_ file: YiFile) async {
-        do {
-            _ = try await client.send(.deleteFile, param: file.path)
+        await deleteFiles([file])
+    }
 
-            // Remove the .THM sidecar too, or the card fills with orphaned
-            // thumbnails for media that no longer exists. Best-effort: the
-            // media file is already gone, so a missing sidecar is not a
-            // failure worth surfacing.
-            if let thumbnailPath = file.thumbnailPath {
-                _ = try? await client.send(.deleteFile, param: thumbnailPath)
+    /// Deletes files and their preview sidecars.
+    ///
+    /// Sequential, not concurrent: the camera's control channel is
+    /// single-threaded and floods poorly. A failure on one file is recorded but
+    /// does not abort the rest — with a multi-selection, stopping at the first
+    /// error would leave the user guessing which ones were removed.
+    func deleteFiles(_ targets: [YiFile]) async {
+        guard !targets.isEmpty, !isDeleting else { return }
+        isDeleting = true
+        deleteProgress = 0
+        defer { isDeleting = false; deleteProgress = 0 }
+
+        var failures: [String] = []
+
+        for (index, file) in targets.enumerated() {
+            deleteProgress = Double(index) / Double(targets.count)
+            do {
+                _ = try await client.send(.deleteFile, param: file.path)
+
+                // Remove the sidecar too, or the card fills with orphaned
+                // previews for media that no longer exists. Best-effort: the
+                // media file is already gone, so a missing sidecar is not a
+                // failure worth surfacing.
+                if let thumbnailPath = file.thumbnailPath {
+                    _ = try? await client.send(.deleteFile, param: thumbnailPath)
+                }
+
+                files.removeAll { $0.id == file.id }
+                // The camera reuses filenames, so a stale cached preview would
+                // otherwise show up against a different file later.
+                ThumbnailLoader.shared.invalidate(file)
+            } catch {
+                failures.append(file.name)
             }
+        }
 
-            files.removeAll { $0.id == file.id }
-            // The camera reuses filenames, so a stale cached preview would
-            // otherwise show up against a different file later.
-            ThumbnailLoader.shared.invalidate(file)
-        } catch {
-            errorMessage = (error as? YiCameraError)?.errorDescription ?? error.localizedDescription
+        if !failures.isEmpty {
+            errorMessage = failures.count == 1
+                ? "Could not delete \(failures[0])."
+                : "Could not delete \(failures.count) of \(targets.count) files: \(failures.prefix(3).joined(separator: ", "))\(failures.count > 3 ? "…" : "")"
         }
     }
 

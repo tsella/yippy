@@ -30,9 +30,22 @@ enum PhotoLibrarySaver {
             return true
         case .notDetermined:
             let granted = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            print("[photos] authorization result: \(describe(granted))")
             return granted == .authorized || granted == .limited
         default:
+            print("[photos] access denied — status: \(describe(status))")
             return false
+        }
+    }
+
+    private static func describe(_ status: PHAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "notDetermined"
+        case .restricted:    return "restricted"
+        case .denied:        return "denied"
+        case .authorized:    return "authorized"
+        case .limited:       return "limited"
+        @unknown default:    return "unknown(\(status.rawValue))"
         }
     }
 
@@ -55,6 +68,10 @@ enum PhotoLibrarySaver {
             throw SaveError.saveFailed("the downloaded file was missing")
         }
 
+        let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let size = (attributes?[.size] as? Int64) ?? 0
+        print("[photos] saving \(fileURL.lastPathComponent) (\(size) bytes, isVideo=\(isVideo))")
+
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 if isVideo {
@@ -63,7 +80,9 @@ enum PhotoLibrarySaver {
                     PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
                 }
             }
+            print("[photos] saved \(fileURL.lastPathComponent)")
         } catch {
+            print("[photos] save FAILED: \(error)")
             throw SaveError.saveFailed(error.localizedDescription)
         }
     }
