@@ -28,7 +28,9 @@ struct ConnectionWizardView: View {
             ("Camera found at \(YiCameraClient.host)",
              "checkmark.circle.fill", .green)
         case .unreachable:
-            ("Camera not found — check the YDXJ_ network and that the camera is awake",
+            // The camera's TCP server can die while its Wi-Fi stays up, so
+            // "not found" while joined to YDXJ_ usually means power-cycle it.
+            ("Camera not responding — if you are on the YDXJ_ network, switch the camera off and on again",
              "wifi.exclamationmark", .orange)
         case .noWiFi:
             ("Wi-Fi is off — join the camera's YDXJ_ network in Settings",

@@ -39,9 +39,16 @@ final class CameraReachability: ObservableObject {
     private var isStopped = false
     /// How long to wait for the control port before calling it unreachable.
     private static let probeTimeout: Duration = .seconds(2)
-    /// Re-probe while the user is looking at the connect screen, so plugging in
-    /// or waking the camera updates the button without a manual retry.
+    /// Re-probe while the user is looking at the connect screen, so waking the
+    /// camera updates the button without a manual retry.
     private static let repeatInterval: Duration = .seconds(4)
+    /// Back off on repeated failures. A camera whose TCP server has died keeps
+    /// refusing connections while the Wi-Fi association stays up, so a fixed
+    /// 4s retry means a SYN and an RST every few seconds indefinitely. The
+    /// NWPathMonitor update is what actually signals a change worth reacting
+    /// to, so slowing down costs nothing.
+    private static let maxRepeatInterval: Duration = .seconds(30)
+    private var consecutiveFailures = 0
 
     var isReachable: Bool { status == .reachable }
 
@@ -87,7 +94,16 @@ final class CameraReachability: ObservableObject {
                 let reachable = await Self.probe()
                 guard !Task.isCancelled else { return }
                 self.status = reachable ? .reachable : .unreachable
-                try? await Task.sleep(for: Self.repeatInterval)
+
+                // Exponential backoff, capped. A dead camera refuses every
+                // connection while the Wi-Fi stays associated, so a fixed
+                // interval would keep firing SYNs at it forever.
+                self.consecutiveFailures = reachable ? 0 : self.consecutiveFailures + 1
+                let backoff = min(
+                    Self.repeatInterval * Double(1 << min(self.consecutiveFailures, 3)),
+                    Self.maxRepeatInterval
+                )
+                try? await Task.sleep(for: reachable ? Self.repeatInterval : backoff)
             }
         }
     }

@@ -93,6 +93,20 @@ The `START_SESSION` (257) response advertises the stream URL in its `rtsp`
 field; prefer it over hardcoding. Track liveness via the `vf_start`/`vf_stop`
 notifications and only mount the player while the viewfinder is active.
 
+### One request at a time, always
+
+**`sendRaw` serialises the control channel.** The camera answers one request at
+a time; overlapping requests make it reset the connection and kill its TCP
+server. Observed on hardware: a view whose load re-entered (SwiftUI re-runs
+`.task` on identity changes, and `.refreshable` can overlap it) queued ~50
+identical `LIST_DIRECTORY` commands back to back and the camera never recovered.
+
+**A dead server is not a dropped Wi-Fi.** After this the phone stays associated
+with a satisfied route (`LQM: good`) while every reconnect is refused at `SYN`.
+Nothing is listening on 7878 any more — only a power cycle fixes it, so the app
+says so rather than offering a retry that cannot work. Reachability probing
+backs off exponentially instead of firing a SYN every few seconds forever.
+
 ### The camera wedges if you talk to it mid-capture
 
 **Observed on real hardware.** After `TAKE_PHOTO`, the camera emits
