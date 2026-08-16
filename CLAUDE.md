@@ -165,6 +165,19 @@ The `1282` listing returns both as ordinary entries, so:
   content that no longer exists. Best-effort: the media file is already gone, so
   a failed sidecar delete is not worth surfacing.
 
+## App Transport Security
+
+**The camera's HTTP file server needs an ATS exception.** Media, thumbnails and
+the capture preview are all fetched from `http://192.168.42.1/…` in cleartext —
+the camera has no TLS and its network has no CA. iOS blocks cleartext by
+default, so without the `NSExceptionDomains` entry for `192.168.42.1` in
+`Info.plist` **every HTTP request fails**, while the app still looks healthy:
+the control channel is a raw `NWConnection` TCP socket and is unaffected, so
+listing, capture and settings all work while the gallery silently shows no
+images and downloads never arrive.
+
+Scope it to the camera's address. Do not set `NSAllowsArbitraryLoads`.
+
 ## Downloads
 
 Media downloaded from the camera goes to the **camera roll** via
