@@ -50,21 +50,29 @@ struct RTSPPlayerView: UIViewRepresentable {
             stop()
             currentURL = url
 
-            let player = VLCMediaPlayer()
+            // Library-level options, which media options cannot reach. VLC's
+            // RTSP demuxer is chosen and configured at library init, so
+            // "--rtsp-tcp" must be set here — as a media option it is silently
+            // ignored, leaving live555 to attempt a UDP bind that fails with
+            // "invalid IP address: 0.0.0.0" on this gateway-less network.
+            let player = VLCMediaPlayer(options: [
+                "--rtsp-tcp",
+                "--rtsp-http=0",
+                // Prefer the built-in RTSP demuxer over the live555 module,
+                // which is the component that cannot resolve a source address.
+                "--no-rtsp-mcast",
+                "--network-caching=300",
+                "--live-caching=300",
+                "--clock-jitter=0",
+                "--clock-synchro=0",
+                "--ipv4",
+            ])
             player.drawable = view
             player.delegate = self
 
             let media = VLCMedia(url: url)
-            // Media options take the ":name=value" form. Library-level options
-            // use "--name", so "--rtsp-tcp" here is silently ignored — the TCP
-            // transport must be requested as ":rtsp-tcp".
+            // Repeated per-media so they survive a demuxer that reads them here.
             media.addOption(":rtsp-tcp")
-            // Belt-and-braces: also force RTP to be interleaved over the RTSP
-            // control connection rather than a separate UDP socket, which is
-            // what fails to bind on this gateway-less network.
-            media.addOption(":rtsp-mcast=0")
-            // Low latency for a live viewfinder; the default 1000ms is too slow
-            // to be usable for framing a shot.
             media.addOption(":network-caching=300")
             media.addOption(":live-caching=300")
             media.addOption(":clock-jitter=0")
