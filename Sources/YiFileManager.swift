@@ -1,109 +1,323 @@
 import Foundation
-import Combine
 
 struct YiFile: Identifiable, Hashable {
-    let id = UUID()
+    /// The camera path is unique per file, so it makes a stable identity —
+    /// unlike a fresh UUID, which would churn the list on every refresh.
+    var id: String { path }
+
     let name: String
     let path: String
     let size: Int64
     let date: Date?
-    
+
+    /// Path of the camera's `.THM` sidecar, if this entry has one.
+    ///
+    /// The camera writes a small JPEG thumbnail beside every photo and video,
+    /// named after the same basename (`YDXJ0182.mp4` → `YDXJ0182.THM`). These
+    /// are listed as separate directory entries but are not media in their own
+    /// right, so they are hidden from the gallery and used as previews instead.
+    var thumbnailPath: String? {
+        guard !isThumbnail else { return nil }
+        return (path as NSString).deletingPathExtension + ".THM"
+    }
+
+    var isThumbnail: Bool {
+        (name as NSString).pathExtension.caseInsensitiveCompare("thm") == .orderedSame
+    }
+
+    var isVideo: Bool {
+        ["mp4", "mov", "avi"].contains((name as NSString).pathExtension.lowercased())
+    }
+
+    /// Media is served over plain HTTP, rooted at the SD card mount point.
     var downloadURL: URL? {
-        let relativePath = path.replacingOccurrences(of: "/tmp/fuse_d/", with: "")
-        return URL(string: "http://192.168.42.1/\(relativePath)")
+        Self.httpURL(forCameraPath: path)
+    }
+
+    /// URL of the `.THM` sidecar, used for gallery previews.
+    var thumbnailURL: URL? {
+        thumbnailPath.flatMap(Self.httpURL(forCameraPath:))
+    }
+
+    static func httpURL(forCameraPath path: String) -> URL? {
+        let relative = path.replacingOccurrences(of: YiFileManager.mediaRoot, with: "")
+        let escaped = relative.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? relative
+        return URL(string: "http://192.168.42.1/\(escaped)")
+    }
+
+    var formattedSize: String {
+        ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+    }
+}
+
+/// Bridges `URLSessionTask.progress` to a callback for the async download API,
+/// which otherwise reports nothing until the transfer completes.
+private final class DownloadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @Sendable (Double) -> Void
+    private var observation: NSKeyValueObservation?
+
+    init(onProgress: @escaping @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+        observation = task.progress.observe(\.fractionCompleted) { [onProgress] progress, _ in
+            onProgress(progress.fractionCompleted)
+        }
+    }
+
+    deinit { observation?.invalidate() }
+}
+
+extension URLSession {
+    /// `download(from:)` with progress reporting.
+    func download(from url: URL,
+                  progress: @escaping @Sendable (Double) -> Void) async throws -> (URL, URLResponse) {
+        try await download(for: URLRequest(url: url),
+                           delegate: DownloadProgressDelegate(onProgress: progress))
     }
 }
 
 @MainActor
 class YiFileManager: ObservableObject {
-    @Published var files: [YiFile] = []
-    @Published var isDownloading = false
-    @Published var downloadProgress: Double = 0.0
-    
+
+    /// Everything on the SD card lives under the FUSE mount.
+    /// `nonisolated` because `YiFile` (a plain value type) reads these while
+    /// building paths and URLs off the actor.
+    nonisolated static let mediaRoot = "/tmp/fuse_d/"
+    nonisolated static let mediaDirectory = "/tmp/fuse_d/DCIM/100MEDIA"
+
+    @Published private(set) var files: [YiFile] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var downloadingFile: YiFile?
+    @Published private(set) var downloadProgress: Double = 0
+    @Published var errorMessage: String?
+    /// Set after a successful save so the UI can confirm where the file went.
+    @Published var savedMessage: String?
+
     private let client: YiCameraClient
-    private var downloadCancellable: AnyCancellable?
-    
+    private var downloadTask: Task<Void, Never>?
+
     init(client: YiCameraClient) {
         self.client = client
     }
-    
-    func listFiles() {
-        Task {
-            do {
-                if let response = try await client.sendCommand(msgId: 1282, param: "-D -S /tmp/fuse_d/DCIM/100MEDIA", expectResponse: true) {
-                    if let listing = response["listing"] as? [[String: Any]] {
-                        var newFiles: [YiFile] = []
-                        for item in listing {
-                            if let items = item["files"] as? [[String: Any]] {
-                                for file in items {
-                                    if let name = file["name"] as? String,
-                                       let size = file["size"] as? Int64 {
-                                        let path = "/tmp/fuse_d/DCIM/100MEDIA/\(name)"
-                                        newFiles.append(YiFile(name: name, path: path, size: size, date: nil))
-                                    }
-                                }
-                            }
-                        }
-                        self.files = newFiles
+
+    // MARK: - Listing
+
+    func listFiles() async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            // -D -S asks for details and sizes.
+            let response = try await client.sendRaw(
+                msgId: YiCommand.listDirectory.rawValue,
+                param: "-D -S \(Self.mediaDirectory)",
+                timeout: .seconds(15) // Large cards take a while to enumerate.
+            )
+
+            let rval = response.rval
+
+            // An empty or unformatted card is a normal state, not an error.
+            if rval == -26 {
+                files = []
+                return
+            }
+            guard rval == YiReturnCode.success else {
+                throw YiCameraError.commandFailed(msgId: YiCommand.listDirectory.rawValue, rval: rval)
+            }
+
+            guard let listing = response["listing"] as? [[String: Any]] else {
+                files = []
+                return
+            }
+
+            // The camera lists a .THM sidecar next to every media file. Those
+            // are previews, not media — showing them would double the gallery
+            // and fill it with tiny duplicate entries.
+            files = Self.parse(listing: listing)
+                .filter { !$0.isThumbnail }
+                .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+        } catch {
+            errorMessage = (error as? YiCameraError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Parses an Ambarella directory listing.
+    ///
+    /// The camera returns the **filename as the JSON key** and packs metadata
+    /// into the value, e.g.
+    /// `{"YDXJ1155.mp4": "391922457 bytes|2015-05-25 14:35:18"}`.
+    /// There is no `name`/`size` key to read.
+    ///
+    /// A few firmwares instead return a dictionary per entry, so both shapes
+    /// are accepted.
+    static func parse(listing: [[String: Any]]) -> [YiFile] {
+        var result: [YiFile] = []
+
+        for entry in listing {
+            for (key, value) in entry {
+                if let meta = value as? String {
+                    let (size, date) = parseMetadata(meta)
+                    result.append(YiFile(name: key,
+                                         path: "\(mediaDirectory)/\(key)",
+                                         size: size,
+                                         date: date))
+                } else if let fields = value as? [String: Any],
+                          let name = fields["name"] as? String {
+                    // Alternate shape: {"<dir>": {"name": ..., "size": ...}}
+                    result.append(YiFile(name: name,
+                                         path: "\(mediaDirectory)/\(name)",
+                                         size: Int64(YiCameraClient.intValue(fields["size"]) ?? 0),
+                                         date: (fields["date"] as? String).flatMap(parseDate)))
+                } else if let items = value as? [[String: Any]] {
+                    // Alternate shape: {"<dir>": [{"name": ..., "size": ...}, …]}
+                    for item in items {
+                        guard let name = item["name"] as? String else { continue }
+                        result.append(YiFile(name: name,
+                                             path: "\(mediaDirectory)/\(name)",
+                                             size: Int64(YiCameraClient.intValue(item["size"]) ?? 0),
+                                             date: (item["date"] as? String).flatMap(parseDate)))
                     }
                 }
-            } catch {
-                print("Failed to list files: \(error)")
             }
         }
+        return result
     }
-    
-    func deleteFile(path: String) {
-        Task {
-            do {
-                _ = try await client.sendCommand(msgId: 1281, param: path, expectResponse: true)
-                // Refresh list automatically after deletion
-                self.listFiles()
-            } catch {
-                print("Failed to delete file: \(error)")
+
+    /// Parses the size out of a listing value such as
+    /// `"391922457 bytes|2015-05-25 14:35:18"`. Returns `nil` when the value
+    /// carries no byte count, which is how directories are reported.
+    nonisolated static func parseSize(_ raw: String) -> Int64? {
+        guard let sizeText = raw.components(separatedBy: "|").first?
+            .replacingOccurrences(of: "bytes", with: "")
+            .trimmingCharacters(in: .whitespaces) else { return nil }
+        return Int64(sizeText)
+    }
+
+    /// Splits `"391922457 bytes|2015-05-25 14:35:18"` into its parts.
+    private static func parseMetadata(_ raw: String) -> (size: Int64, date: Date?) {
+        let parts = raw.components(separatedBy: "|")
+        let date = parts.count > 1 ? parseDate(parts[1]) : nil
+        return (parseSize(raw) ?? 0, date)
+    }
+
+    private static func parseDate(_ raw: String) -> Date? {
+        // The camera speaks local wall-clock time in one format; the client
+        // owns that formatter since it also writes the camera's clock.
+        YiCameraClient.clockFormatter.date(from: raw.trimmingCharacters(in: .whitespaces))
+    }
+
+    // MARK: - Mutation
+
+    func deleteFile(_ file: YiFile) async {
+        do {
+            _ = try await client.send(.deleteFile, param: file.path)
+
+            // Remove the .THM sidecar too, or the card fills with orphaned
+            // thumbnails for media that no longer exists. Best-effort: the
+            // media file is already gone, so a missing sidecar is not a
+            // failure worth surfacing.
+            if let thumbnailPath = file.thumbnailPath {
+                _ = try? await client.send(.deleteFile, param: thumbnailPath)
             }
+
+            files.removeAll { $0.id == file.id }
+            // The camera reuses filenames, so a stale cached preview would
+            // otherwise show up against a different file later.
+            ThumbnailLoader.shared.invalidate(file)
+        } catch {
+            errorMessage = (error as? YiCameraError)?.errorDescription ?? error.localizedDescription
         }
     }
-    
+
+    // MARK: - Download
+
     func downloadFile(_ file: YiFile) {
-        guard let url = file.downloadURL else { return }
-        
-        isDownloading = true
-        downloadProgress = 0.0
-        
-        let task = URLSession.shared.downloadTask(with: url) { [weak self] localURL, response, error in
-            Task { @MainActor [weak self] in
-                self?.isDownloading = false
-                self?.downloadCancellable = nil
-                
-                if let error = error {
-                    print("Download error: \(error)")
+        guard downloadingFile == nil, let url = file.downloadURL else { return }
+
+        downloadingFile = file
+        downloadProgress = 0
+
+        downloadTask = Task { [weak self] in
+            defer {
+                self?.downloadingFile = nil
+                self?.downloadProgress = 0
+            }
+            do {
+                // Ask before spending time on a download we cannot save.
+                guard await PhotoLibrarySaver.requestAccess() else {
+                    self?.errorMessage = PhotoLibrarySaver.SaveError.permissionDenied.errorDescription
                     return
                 }
-                guard let localURL = localURL else { return }
-                
-                do {
-                    let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                    let destinationURL = documentsURL.appendingPathComponent(file.name)
-                    
-                    if FileManager.default.fileExists(atPath: destinationURL.path) {
-                        try FileManager.default.removeItem(at: destinationURL)
-                    }
-                    try FileManager.default.moveItem(at: localURL, to: destinationURL)
-                    print("File saved to \(destinationURL)")
-                } catch {
-                    print("File save error: \(error)")
+
+                let downloaded = try await Self.download(from: url, named: file.name) { [weak self] progress in
+                    Task { @MainActor in self?.downloadProgress = progress }
                 }
+
+                // Save completes before the staged file is removed — Photos
+                // copies from this URL, so deleting it early loses the asset.
+                do {
+                    try await PhotoLibrarySaver.save(fileURL: downloaded, isVideo: file.isVideo)
+                    try? FileManager.default.removeItem(at: downloaded)
+                } catch {
+                    try? FileManager.default.removeItem(at: downloaded)
+                    throw error
+                }
+                self?.savedMessage = "\(file.name) saved to Photos"
+            } catch is CancellationError {
+                // User cancelled; nothing to report.
+            } catch {
+                self?.errorMessage = (error as? LocalizedError)?.errorDescription
+                    ?? "Download failed: \(error.localizedDescription)"
             }
         }
-        
-        // Observe progress
-        downloadCancellable = task.progress.publisher(for: \.fractionCompleted)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] progress in
-                self?.downloadProgress = progress
+    }
+
+    func cancelDownload() {
+        downloadTask?.cancel()
+        downloadTask = nil
+    }
+
+    /// Downloads straight to disk, so large videos never sit in memory.
+    ///
+    /// `URLSession.download` writes to its own temporary file and reports
+    /// progress through the task, which avoids reading the body byte by byte —
+    /// a several-hundred-megabyte video would otherwise cost one async
+    /// iteration and one single-byte append per byte.
+    private static func download(from url: URL, named name: String,
+                                 onProgress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        let (downloaded, response) = try await URLSession.shared.download(
+            from: url, progress: onProgress
+        )
+
+        do {
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                throw URLError(.badServerResponse)
             }
-        
-        task.resume()
+
+            // Staged in the temporary directory: Photos copies the file into
+            // the library, after which the caller deletes this. Writing to
+            // Documents would leave media in the app's private container,
+            // where it is invisible to the user and never reclaimed.
+            let staging = FileManager.default.temporaryDirectory
+                .appendingPathComponent("yippy-download", isDirectory: true)
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+
+            // Photos infers the asset type from the file extension, so keep it.
+            let destination = staging.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: downloaded, to: destination)
+            onProgress(1)
+            return destination
+        } catch {
+            // URLSession hands us ownership of the temporary file; it is not
+            // cleaned up for us if we bail out before moving it.
+            try? FileManager.default.removeItem(at: downloaded)
+            throw error
+        }
     }
 }
