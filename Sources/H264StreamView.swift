@@ -1,0 +1,134 @@
+import SwiftUI
+import AVFoundation
+import VideoToolbox
+
+/// Displays H.264 access units using `AVSampleBufferDisplayLayer`.
+///
+/// The layer decodes and renders in one step, so no `VTDecompressionSession` is
+/// needed — we hand it `CMSampleBuffer`s built from the depacketised NALs and
+/// a format description derived from the SPS/PPS.
+final class H264StreamLayerView: UIView {
+    override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
+
+    private var displayLayer: AVSampleBufferDisplayLayer {
+        layer as! AVSampleBufferDisplayLayer
+    }
+
+    private var formatDescription: CMVideoFormatDescription?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .black
+        displayLayer.videoGravity = .resizeAspect
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// Builds the format description from the parameter sets. Must be called
+    /// before any frame is enqueued, and again if they change mid-stream.
+    func configure(sps: Data, pps: Data) {
+        var description: CMVideoFormatDescription?
+        let status = sps.withUnsafeBytes { spsBytes in
+            pps.withUnsafeBytes { ppsBytes in
+                let pointers = [spsBytes.baseAddress!.assumingMemoryBound(to: UInt8.self),
+                                ppsBytes.baseAddress!.assumingMemoryBound(to: UInt8.self)]
+                let sizes = [sps.count, pps.count]
+                return CMVideoFormatDescriptionCreateFromH264ParameterSets(
+                    allocator: kCFAllocatorDefault,
+                    parameterSetCount: 2,
+                    parameterSetPointers: pointers,
+                    parameterSetSizes: sizes,
+                    // 4, matching the AVCC prefixes the depacketiser emits.
+                    nalUnitHeaderLength: 4,
+                    formatDescriptionOut: &description
+                )
+            }
+        }
+        guard status == noErr else {
+            print("[h264] format description failed: \(status)")
+            return
+        }
+        formatDescription = description
+    }
+
+    /// Enqueues one access unit, already in AVCC form.
+    func enqueue(_ avcc: Data, presentationTime: CMTime) {
+        guard let formatDescription else { return }
+
+        // CoreMedia needs the bytes to outlive this call, so allocate a block
+        // it owns and copy into it rather than pointing at a local Data.
+        var blockBuffer: CMBlockBuffer?
+        guard CMBlockBufferCreateWithMemoryBlock(
+            allocator: kCFAllocatorDefault,
+            memoryBlock: nil,
+            blockLength: avcc.count,
+            blockAllocator: kCFAllocatorDefault,
+            customBlockSource: nil,
+            offsetToData: 0,
+            dataLength: avcc.count,
+            flags: 0,
+            blockBufferOut: &blockBuffer
+        ) == kCMBlockBufferNoErr, let blockBuffer else { return }
+
+        let copied = avcc.withUnsafeBytes { bytes -> OSStatus in
+            CMBlockBufferReplaceDataBytes(with: bytes.baseAddress!,
+                                          blockBuffer: blockBuffer,
+                                          offsetIntoDestination: 0,
+                                          dataLength: avcc.count)
+        }
+        guard copied == kCMBlockBufferNoErr else { return }
+        let data = avcc
+
+        var sampleBuffer: CMSampleBuffer?
+        var timing = CMSampleTimingInfo(duration: .invalid,
+                                        presentationTimeStamp: presentationTime,
+                                        decodeTimeStamp: .invalid)
+        var sampleSize = data.count
+        guard CMSampleBufferCreateReady(
+            allocator: kCFAllocatorDefault,
+            dataBuffer: blockBuffer,
+            formatDescription: formatDescription,
+            sampleCount: 1,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleSizeEntryCount: 1,
+            sampleSizeArray: &sampleSize,
+            sampleBufferOut: &sampleBuffer
+        ) == noErr, let sampleBuffer else { return }
+
+        // Display immediately — this is a live viewfinder, not playback.
+        if let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true),
+           CFArrayGetCount(attachments) > 0 {
+            let attachment = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0),
+                                           to: CFMutableDictionary.self)
+            CFDictionarySetValue(attachment,
+                                 Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+                                 Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
+        }
+
+        if displayLayer.status == .failed { displayLayer.flush() }
+        displayLayer.enqueue(sampleBuffer)
+    }
+
+    func reset() {
+        displayLayer.flushAndRemoveImage()
+        formatDescription = nil
+    }
+}
+
+/// SwiftUI wrapper that drives the layer from an `RTSPStream`.
+struct H264StreamView: UIViewRepresentable {
+    @ObservedObject var stream: RTSPStream
+
+    func makeUIView(context: Context) -> H264StreamLayerView {
+        let view = H264StreamLayerView()
+        stream.attach(view)
+        return view
+    }
+
+    func updateUIView(_ uiView: H264StreamLayerView, context: Context) {}
+
+    static func dismantleUIView(_ uiView: H264StreamLayerView, coordinator: ()) {
+        uiView.reset()
+    }
+}

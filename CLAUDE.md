@@ -70,6 +70,22 @@ That message is a *symptom of the missing 259*, not a VLC or network bug — the
 player is dialing a server that was never started. `260` stops the stream again
 and re-enables the physical shutter button on some firmwares.
 
+**The viewfinder does not use VLC.** `RTSPStream` speaks RTSP directly and
+decodes with `AVSampleBufferDisplayLayer`, because VLC cannot play this camera:
+
+- The camera answers `461 Unsupported Transport` for
+  `RTP/AVP/TCP;interleaved=0-1`, so `--rtsp-tcp` can never work — it is UDP-only.
+- On the UDP path live555 derives its local address with a multicast trick that
+  returns `0.0.0.0` on iOS, which is the "invalid IP address" message. Fixing
+  it upstream means patching `GroupsockHelper.cpp`, which a prebuilt
+  MobileVLCKit rules out.
+
+The stream itself is simple enough that speaking it directly is less work than
+carrying a media framework: one H.264 baseline track (`profile-level-id=42801E`),
+`packetization-mode=1`, no audio, no auth, no encryption. `H264Depacketizer`
+handles the three RFC 6184 payload shapes (single NAL, STAP-A, FU-A) and emits
+AVCC; SPS/PPS come from `sprop-parameter-sets` in the SDP.
+
 **live555 needs iOS Local Network permission to be *granted*.** It enumerates
 local interfaces to pick an RTP source address; without the permission it gets
 nothing and reports `invalid IP address: 0.0.0.0` — while the TCP control socket

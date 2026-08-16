@@ -2,7 +2,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @ObservedObject var client: YiCameraClient
-    @State private var streamState: RTSPPlayerView.State = .connecting
+    @StateObject private var stream = RTSPStream()
 
     var body: some View {
         ZStack {
@@ -76,34 +76,37 @@ struct DashboardView: View {
             // VLC reports "invalid IP address: 0.0.0.0".
             if client.isViewfinderActive {
                 ZStack {
-                    RTSPPlayerView(url: client.streamURL) { state in
-                        streamState = state
-                    }
-                    if streamState == .connecting {
+                    // Native RTSP/UDP path. VLC cannot play this camera: it
+                    // refuses interleaved TCP (461) and live555 cannot resolve
+                    // a local address for the UDP path on iOS.
+                    H264StreamView(stream: stream)
+                        .onAppear { stream.start(url: client.streamURL) }
+                        .onDisappear { stream.stop() }
+
+                    if case .failed(let reason) = stream.state {
+                        VStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.title)
+                                .foregroundStyle(.orange)
+                            Text(reason)
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                            Button("Retry") {
+                                stream.stop()
+                                stream.start(url: client.streamURL)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.white)
+                        }
+                        .padding()
+                    } else if stream.state == .connecting {
                         VStack(spacing: 8) {
                             ProgressView().tint(.white)
                             Text("Connecting to stream…")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.8))
                         }
-                    } else if streamState == .failed {
-                        VStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.title)
-                                .foregroundStyle(.orange)
-                            Text("Stream failed to connect")
-                                .font(.caption)
-                                .foregroundStyle(.white)
-                            Text(client.streamURL.absoluteString)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.6))
-                            Button("Retry") {
-                                Task { await client.restartViewfinder() }
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.white)
-                        }
-                        .padding()
                     }
                 }
             } else {
