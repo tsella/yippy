@@ -444,19 +444,24 @@ class YiCameraClient: ObservableObject {
     /// SD card, probing unknown ids).
     func sendRaw(msgId: Int, param: String? = nil, type: String? = nil,
                  timeout: Duration = YiCameraClient.requestTimeout) async throws -> [String: Any] {
-        // The camera answers one request at a time, so send one at a time.
-        // Without this, a view that re-enters its load (SwiftUI re-runs .task
-        // on identity changes, and .refreshable can overlap it) queues dozens
-        // of identical commands back to back and the camera resets the
-        // connection. Serialising here means no caller can flood it.
+        // Wait out an in-flight capture BEFORE taking the channel. Holding the
+        // channel while parked here would block every other request behind a
+        // gate that can last for the whole watchdog timeout.
+        //
+        // The camera is single-threaded while writing a photo, and one command
+        // sent in that window wedges its TCP server for the rest of the
+        // session — so this has to hold for the gallery refresh and the
+        // heartbeat too, not just the shutter.
+        await awaitCaptureCompletion()
+
+        // Then take exclusive use of the channel: the camera answers one
+        // request at a time, and overlapping requests make it reset the
+        // connection.
         await acquireChannel()
         defer { releaseChannel() }
 
-        // Wait out an in-flight capture rather than relying on every caller to
-        // check `isCapturing`. The camera is single-threaded while writing a
-        // photo, and one command sent in that window wedges its TCP server for
-        // the rest of the session — so this has to hold for the gallery
-        // refresh and the heartbeat too, not just the shutter.
+        // The capture gate can have re-armed while queueing for the channel
+        // (a second shutter press), so re-check rather than assuming.
         await awaitCaptureCompletion()
 
         guard isConnected, let connection else { throw YiCameraError.notConnected }
@@ -845,10 +850,14 @@ class YiCameraClient: ObservableObject {
         captureWatchdog = Task { [weak self] in
             // The camera does not always report completion. Without this the
             // shutter would stay disabled for the rest of the session.
-            try? await Task.sleep(for: .seconds(8))
+            // This firmware ends the sequence at precise_capture_data_ready and
+            // never sends photo_taken, so the watchdog is the normal path, not
+            // an edge case — and releasing it too early sends a command into a
+            // camera still writing to the card, which kills its TCP server.
+            // Err long: the cost of waiting is a briefly disabled shutter, the
+            // cost of being early is a session that needs a power cycle.
+            try? await Task.sleep(for: .seconds(15))
             guard !Task.isCancelled else { return }
-            // Release the gate and anything parked behind it, so a firmware
-            // that never reports completion cannot stall the app.
             self?.endCapture()
         }
     }

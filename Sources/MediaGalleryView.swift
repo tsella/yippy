@@ -11,6 +11,9 @@ struct MediaGalleryView: View {
     /// everything without leaving the mode).
     @State private var selection: Set<String>?
     @State private var confirmingBatchDelete = false
+    /// Set when the camera reports new media while the gallery is not the
+    /// active screen; consumed on next appearance.
+    @State private var staleAfterCapture = false
 
     private let columns = [GridItem(.adaptive(minimum: 100, maximum: 150), spacing: 16)]
 
@@ -43,15 +46,23 @@ struct MediaGalleryView: View {
             if isSelecting { selectionBar }
         }
         .task {
-            // Only load on first appearance; pull-to-refresh handles the rest.
-            if fileManager.files.isEmpty { await fileManager.listFiles() }
+            // Refresh on appearance, including when returning after a capture
+            // — by then the camera has long finished writing.
+            if fileManager.files.isEmpty || staleAfterCapture {
+                staleAfterCapture = false
+                await fileManager.listFiles()
+            }
         }
         // The camera pushes photo_taken / video_record_complete when new media
         // lands on the card, so the gallery refreshes itself instead of polling.
+        // Deliberately NOT refreshing on capture. Listing the card while the
+        // camera is finishing a photo kills its TCP server, and the completion
+        // notification this firmware sends (precise_capture_data_ready) does
+        // not mean the write is done — so there is no notification that can
+        // safely trigger a refresh. The gallery reloads when it next appears,
+        // and pull-to-refresh is always available.
         .onChange(of: client.mediaChangeCount) { _ in
-            // Capture-driven refresh: a new file can only have been added, so
-            // skip the orphan sweep and keep this path light.
-            Task { await fileManager.listFiles(fullRefresh: false) }
+            staleAfterCapture = true
         }
         .overlay { downloadOverlay }
         .overlay {

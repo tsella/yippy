@@ -116,6 +116,13 @@ server: every subsequent request times out, and the camera eventually drops its
 Wi-Fi entirely (`EADDRNOTAVAIL 49` / "No network route"). Only a power cycle
 recovers it.
 
+**Nothing may talk to the camera after a capture until it is idle.** There is no
+notification that reliably means "the write finished" on this firmware, so
+there is no safe trigger for an automatic refresh — the gallery must not reload
+on capture. It reloads on next appearance instead, and pull-to-refresh is always
+available. This is why an auto-refresh-on-capture feature had to be removed
+after it killed the camera on the first photo.
+
 `isCapturing` gates the camera from `start_photo_capture` until `photo_taken`.
 **Enforced in `sendRaw`**, so *every* request waits — gating only the shutter
 and the heartbeat was not enough: the gallery's refresh-on-capture fired
