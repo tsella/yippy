@@ -107,8 +107,20 @@ datagram as the flow. Do **not** pass `requiredLocalEndpoint` in the parameters
 produced the spurious "error 22" that was once blamed on `NWListener` being
 "the wrong shape" for datagrams. It is the right shape.
 
-The receive path times out after 10s so a camera that accepts PLAY and then
-sends nothing reports a failure instead of hanging in `.playing` forever.
+Three further things this gets wrong easily, all observed on hardware:
+
+- **Set `newConnectionHandler` before `start()`.** Network.framework logs
+  `Started without setting either new connection handler…` otherwise, and any
+  datagram arriving in that window is dropped. Installing it after SETUP/PLAY
+  loses the start of the stream — or all of it.
+- **Use `receiveMessage`, not `receive(minimumIncompleteLength:maximumLength:)`.**
+  The latter is a stream API and does not reliably deliver datagrams.
+- **Buffer from the moment the flow is accepted.** RTP arrives as soon as the
+  camera processes PLAY, which is before the reader is awaiting it;
+  `RTPFlow` queues (bounded, oldest-first) so those packets are not lost.
+
+Only the *first* packet has a deadline (10s). After that a gap is a dropped
+datagram, not a dead stream, and must not tear the session down.
 
 **live555 needs iOS Local Network permission to be *granted*.** It enumerates
 local interfaces to pick an RTP source address; without the permission it gets
@@ -160,15 +172,28 @@ normal, not an error.
 `photo_taken`. The player remounts on that notification and re-runs the whole
 RTSP handshake — a fresh session and new SPS/PPS each time.
 
-`reviveViewfinderAfterModeChange()` re-issues `259` if that `vf_start` does not
-arrive, as a fallback for firmwares that need asking. **It is bounded to three
-attempts on purpose**: if a firmware genuinely cannot stream while recording, an
-open-ended retry is the same request flood that has wedged this camera before.
+**There is no live preview while recording, and asking for one is harmful.**
+`START_VIEWFINDER` answers `-21` (`YiReturnCode.wrongMode`) for the entire
+recording — the viewfinder and recording are mutually exclusive on this
+firmware. Verified on hardware, and the retries were actively destructive:
 
-Note what this means for a preview *during* recording: the camera stops the
-stream for the duration and only returns it at `video_record_complete`, so there
-is no live preview while recording on this firmware. The gap is the camera's,
-not the app's.
+```
+Reviving viewfinder after mode change (attempt 1)   → rval=-21
+Reviving viewfinder after mode change (attempt 2)   → rval=-21
+Reviving viewfinder after mode change (attempt 3)   → rval=-21
+Heartbeat failed: The camera did not respond in time.
+RECORD_START failed: The camera did not respond in time.
+```
+
+Three refused commands were enough to wedge the control channel. So
+`reviveViewfinderAfterModeChange()` **does not run while `isRecording`**, and
+treats `-21` as terminal rather than retryable wherever it appears. It remains
+only as a fallback for a firmware that drops the stream and does *not* restore
+it — which this one always does, at `video_record_complete`.
+
+This is the general rule on this camera: a refusal is information, not an
+invitation to retry. Retrying into a busy or wrong-mode camera is how the
+control channel dies.
 
 Anything that issues `260` — `stopViewfinder()`, `restartViewfinder()` — must
 cancel a pending revival first, since that `260` draws its own `vf_stop` and the

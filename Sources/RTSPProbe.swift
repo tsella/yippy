@@ -130,9 +130,10 @@ final class RTSPProbe: ObservableObject {
         //     that returns 0.0.0.0 on iOS. NWConnection has no such problem, so
         //     this establishes whether the *camera* will stream over UDP.
         var rtpListener: NWListener?
+        let rtpFlow = RTSPStream.RTPFlow()
         if session == nil {
             do {
-                let (rtp, port) = try Self.bindRTPPort()
+                let (rtp, port) = try Self.bindRTPPort(delivering: rtpFlow)
                 rtpListener = rtp
                 note("Bound local UDP port \(port) for RTP")
 
@@ -161,8 +162,8 @@ final class RTSPProbe: ObservableObject {
         guard await request("PLAY", target: track, headers: ["Session: \(session)"]) != nil else { return }
 
         note("Listening for RTP packets (5s)…")
-        if let rtp = rtpListener {
-            await readUDP(rtp, seconds: 5)
+        if rtpListener != nil {
+            await readUDP(rtpFlow, seconds: 5)
         }
 
         if packetsReceived > 0 {
@@ -174,6 +175,7 @@ final class RTSPProbe: ObservableObject {
         }
 
         _ = await request("TEARDOWN", target: track, headers: ["Session: \(session)"])
+        rtpFlow.finish()
         rtpListener?.newConnectionHandler = nil
         rtpListener?.cancel()
     }
@@ -216,10 +218,14 @@ final class RTSPProbe: ObservableObject {
     /// socket drops datagrams from any other source — a handshake that
     /// completes cleanly and then delivers nothing.
     ///
+    /// The handler is installed before `start()`: RTP can arrive as soon as the
+    /// camera processes PLAY, and a datagram landing on a handler-less listener
+    /// is discarded ("Started without setting either new connection handler…").
+    ///
     /// (An earlier version blamed `NWListener` for an "error 22" here. That was
     /// the `requiredLocalEndpoint` in the parameters, not the listener: a
     /// listener takes its port in `NWListener(using:on:)` instead.)
-    private static func bindRTPPort() throws -> (NWListener, UInt16) {
+    private static func bindRTPPort(delivering flow: RTSPStream.RTPFlow) throws -> (NWListener, UInt16) {
         // Pick a high even port, as RTP convention expects (RTCP takes port+1).
         let port = UInt16.random(in: 20000...40000) & ~1
 
@@ -228,65 +234,21 @@ final class RTSPProbe: ObservableObject {
         parameters.allowLocalEndpointReuse = true
 
         let listener = try NWListener(using: parameters, on: .init(rawValue: port)!)
+        listener.newConnectionHandler = { connection in flow.accept(connection) }
         listener.start(queue: .global(qos: .userInitiated))
         return (listener, port)
     }
 
     /// Counts RTP datagrams arriving on the bound UDP port.
-    private func readUDP(_ listener: NWListener, seconds: TimeInterval) async {
+    private func readUDP(_ flow: RTSPStream.RTPFlow, seconds: TimeInterval) async {
         let deadline = Date().addingTimeInterval(seconds)
 
-        // The camera's first datagram establishes the flow.
-        guard let connection = await Self.firstInboundFlow(on: listener,
-                                                           timeout: .seconds(5)) else {
-            note("✗ No RTP arrived — the camera never sent to our port.")
-            return
-        }
-        note("  RTP flow from \(connection.endpoint)")
-
         while Date() < deadline, !Task.isCancelled {
-            guard let datagram = try? await Self.receive(connection, max: 65536),
-                  !datagram.isEmpty else {
-                try? await Task.sleep(for: .milliseconds(100))
-                continue
-            }
+            guard let datagram = await flow.next(), !datagram.isEmpty else { break }
             packetsReceived += 1
             bytesReceived += datagram.count
             if packetsReceived == 1 {
-                note("  first RTP datagram: \(datagram.count) bytes")
-            }
-        }
-    }
-
-    /// Guards a one-shot continuation against a second inbound flow.
-    private final class FlowGate: @unchecked Sendable {
-        private let lock = NSLock()
-        private var claimed = false
-
-        func claim() -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            guard !claimed else { return false }
-            claimed = true
-            return true
-        }
-    }
-
-    private static func firstInboundFlow(on listener: NWListener,
-                                         timeout: Duration) async -> NWConnection? {
-        let gate = FlowGate()
-        return await withCheckedContinuation { (continuation: CheckedContinuation<NWConnection?, Never>) in
-            listener.newConnectionHandler = { connection in
-                guard gate.claim() else {
-                    connection.cancel()
-                    return
-                }
-                connection.start(queue: .global(qos: .userInitiated))
-                continuation.resume(returning: connection)
-            }
-            Task {
-                try? await Task.sleep(for: timeout)
-                guard gate.claim() else { return }
-                continuation.resume(returning: nil)
+                note("  first RTP datagram: \(datagram.count) bytes from \(flow.endpointDescription)")
             }
         }
     }

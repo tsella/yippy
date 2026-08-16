@@ -97,6 +97,15 @@ enum YiReturnCode {
     /// rather than as a discovered command.
     static let unsupportedCommandCodes: Set<Int> = [-9, -4, -7]
 
+    /// The camera is busy or in a mode that forbids the command.
+    ///
+    /// **Not retryable.** `START_VIEWFINDER` answers this for the whole of a
+    /// recording — the viewfinder and recording are mutually exclusive on this
+    /// firmware — so retrying only adds traffic to a channel that must stay
+    /// quiet. Observed on hardware: three retries were followed by heartbeat
+    /// timeouts that needed a power cycle.
+    static let wrongMode = -21
+
     private static let table: [Int: String] = [
           0: "Success",
          -1: "Command failed / invalid state for this command",

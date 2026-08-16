@@ -718,6 +718,16 @@ class YiCameraClient: ObservableObject {
     /// than hammering a camera that will never answer.
     private func reviveViewfinderAfterModeChange() {
         guard viewfinderRequested, !isReviving else { return }
+        // Recording and the viewfinder are mutually exclusive on this firmware:
+        // 259 answers -21 (wrong mode) for the whole recording, and the camera
+        // restores the stream itself at video_record_complete. Retrying through
+        // a recording is pure noise on a channel that must stay quiet — and it
+        // wedged the camera on hardware, three -21s followed by heartbeat
+        // timeouts that only a power cycle cleared.
+        guard !isRecording else {
+            print("Not reviving viewfinder — the camera is recording and will restore it itself")
+            return
+        }
         isReviving = true
 
         viewfinderRevival = Task { [weak self] in
@@ -739,6 +749,15 @@ class YiCameraClient: ObservableObject {
                     // The camera confirms with vf_start, which remounts the
                     // player. Trust the notification rather than assuming.
                     return
+                } catch let error as YiCameraError {
+                    print("Viewfinder revival attempt \(attempt) failed: \(error.localizedDescription)")
+                    // -21 is "wrong mode", not "try again": the camera will
+                    // keep refusing until whatever holds the mode releases it.
+                    if case .commandFailed(_, let rval) = error,
+                       rval == YiReturnCode.wrongMode {
+                        print("Viewfinder cannot start in this mode — not retrying")
+                        return
+                    }
                 } catch {
                     print("Viewfinder revival attempt \(attempt) failed: \(error.localizedDescription)")
                 }
