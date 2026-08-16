@@ -37,6 +37,16 @@
 			</dict>
 		</dict>
 	</dict>
+	<!-- Declaring a Bonjour service makes iOS raise the Local Network prompt
+	     reliably. Without the permission actually being *granted*, VLC's
+	     live555 cannot enumerate local interfaces to pick an RTP source
+	     address and fails with "invalid IP address: 0.0.0.0" — even though the
+	     TCP control socket to the same host works fine. -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_rtsp._tcp</string>
+		<string>_http._tcp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Connect to the Xiaomi Yi Action Camera.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
