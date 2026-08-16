@@ -323,8 +323,10 @@ final class RTSPStream: ObservableObject {
     /// Applies one decoded frame. Main-actor because `AVSampleBufferDisplayLayer`
     /// and the published counter both require it.
     private func display(_ frame: RTPDecoder.Frame, isFirst: Bool) {
+        // The layer decides whether this is a real change: the camera's in-band
+        // SPS is not byte-identical to the SDP's even when it describes the
+        // same format, so only a format-description comparison is meaningful.
         if let sets = frame.parameterSets {
-            log("in-band parameter sets changed — reconfiguring decoder")
             configure(sps: sets.sps, pps: sets.pps)
         }
         view?.enqueue(frame.avcc, presentationTime: frame.presentationTime)

@@ -46,8 +46,16 @@ final class H264StreamLayerView: UIView {
                 )
             }
         }
-        guard status == noErr else {
+        guard status == noErr, let description else {
             print("[h264] format description failed: \(status)")
+            return
+        }
+
+        // Compare the *descriptions*, not the raw parameter-set bytes. This
+        // camera's in-band SPS is not byte-identical to the SDP's even when it
+        // describes the same format, so a byte comparison upstream reports a
+        // spurious change on the first IDR of every session.
+        if let existing = formatDescription, CMFormatDescriptionEqual(existing, otherFormatDescription: description) {
             return
         }
         formatDescription = description
@@ -55,13 +63,11 @@ final class H264StreamLayerView: UIView {
         // The SPS carries the real frame size. Report it so the view can size
         // itself to the video rather than assuming an aspect ratio — this
         // camera changes encoder configuration between modes.
-        if let description {
-            let size = CMVideoFormatDescriptionGetDimensions(description)
-            if size.width > 0, size.height > 0 {
-                let ratio = CGFloat(size.width) / CGFloat(size.height)
-                print("[h264] video is \(size.width)×\(size.height)")
-                onAspectRatio?(ratio)
-            }
+        let size = CMVideoFormatDescriptionGetDimensions(description)
+        if size.width > 0, size.height > 0 {
+            let ratio = CGFloat(size.width) / CGFloat(size.height)
+            print("[h264] video is \(size.width)×\(size.height)")
+            onAspectRatio?(ratio)
         }
     }
 

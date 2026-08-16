@@ -203,7 +203,7 @@ struct SettingsView: View {
             if !candidates.isEmpty {
                 logo = await ThumbnailLoader.shared.logo(from: candidates)
                 if logo == nil {
-                    print("[settings] logo unavailable; tried \(candidates.map(\.absoluteString))")
+                    print("[settings] logo unavailable; tried \(candidates.map(\.absoluteString)) — not retrying this session")
                 }
             }
 

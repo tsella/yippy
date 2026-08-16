@@ -151,6 +151,12 @@ final class ThumbnailLoader: ObservableObject {
         if let hit = await ThumbnailCache.shared.image(named: "logo.png", cameraID: cameraID) {
             return hit
         }
+        // Remember a miss for the session. `GET_DEVICE_INFO` reports the logo
+        // at /tmp/fuse_z/, internal flash the HTTP server does not appear to
+        // serve, so every candidate 404s — and retrying on each settings visit
+        // costs three fetches at a 15s timeout over the camera's slow link.
+        guard !camerasWithoutLogo.contains(cameraID) else { return nil }
+
         for url in candidates {
             guard let data = await Self.fetch(url, timeout: 15),
                   let image = UIImage(data: data) else { continue }
@@ -158,8 +164,13 @@ final class ThumbnailLoader: ObservableObject {
             await ThumbnailCache.shared.store(image, named: "logo.png", cameraID: cameraID)
             return image
         }
+        camerasWithoutLogo.insert(cameraID)
         return nil
     }
+
+    /// Cameras whose logo could not be fetched this session. Not persisted: a
+    /// firmware update could add the route, and a relaunch is cheap to retry.
+    private var camerasWithoutLogo: Set<String> = []
 
     /// Reconciles the disk cache with the camera's current contents.
     ///
