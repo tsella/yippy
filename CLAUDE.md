@@ -428,11 +428,21 @@ The `1282` listing returns both as ordinary entries, so:
   Video sidecars need `AVAssetImageGenerator`, which requires a local file, so
   the (small) clip is downloaded to `temporaryDirectory` and deleted after.
   Photos fall back to the original when no `.THM` exists.
-- **Delete the sidecar with its media**, or the card accumulates orphans for
-  content that no longer exists. **Only delete a sidecar the listing actually
-  reported** — the path can be derived from the media name, but deriving it does
-  not mean the file exists, and deleting a non-existent path draws `-1` or `-13`
-  from the camera. `YiFileManager.sidecarPaths` records what was listed.
+- **Do not delete the sidecar — the firmware already does.** `DELETE_FILE` on
+  the media removes its sidecar too. Verified on hardware:
+
+  ```
+  → DELETE_FILE param=…/YDXJ0316.mp4
+  ← DELETE_FILE ok
+  → DELETE_FILE param=…/YDXJ0316_thm.mp4
+  ← DELETE_FILE rval=-1        ← already gone
+  ```
+
+  and a deleted photo's `.THM` never appears in the next listing. An app-side
+  sidecar delete is therefore a second request on a channel that must stay
+  quiet, and it always fails. This looked for a long time like a *missing*
+  feature — the app-side code existed and silently did nothing — so the absence
+  of a sidecar delete in the log is correct, not a bug.
 
 ## The camera has more than one FUSE mount
 

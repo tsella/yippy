@@ -134,10 +134,6 @@ class YiFileManager: ObservableObject {
     @Published private(set) var batchProgress: (current: Int, total: Int)?
     /// Paths of preview sidecars the camera actually reported, so a delete is
     /// only issued for one that exists.
-    /// Sidecars the listing actually reported, keyed by lowercased path so a
-    /// derived `.THM` matches a listed `.thm`. The value is the path as the
-    /// camera spelled it — that is what `DELETE_FILE` must be given.
-    private var sidecarPaths: [String: String] = [:]
 
     private let client: YiCameraClient
     private var downloadTask: Task<Void, Never>?
@@ -181,19 +177,6 @@ class YiFileManager: ObservableObject {
             }
 
             let all = Self.parse(listing: listing)
-
-            // Record which sidecars actually exist. The path can be derived
-            // from the media name, but deriving it does not mean the file is
-            // there — issuing a delete for one that is not present returns
-            // -1/-13 from the camera. The listing is the authority.
-            // Keyed case-insensitively: the derived path spells the photo
-            // sidecar `.THM`, but firmwares disagree on case, and an exact
-            // match would silently leave the sidecar behind on one that lists
-            // `.thm`. Maps to the path as listed, which is what must be sent.
-            sidecarPaths = Dictionary(
-                all.filter(\.isThumbnail).map { ($0.path.lowercased(), $0.path) },
-                uniquingKeysWith: { first, _ in first }
-            )
 
             // Sidecars are previews, not media — showing them would double the
             // gallery and fill it with tiny duplicate entries.
@@ -309,23 +292,13 @@ class YiFileManager: ObservableObject {
         for (index, file) in targets.enumerated() {
             deleteProgress = Double(index) / Double(targets.count)
             do {
+                // The firmware removes the sidecar with its media — verified on
+                // hardware: deleting YDXJ0316.mp4 left YDXJ0316_thm.mp4 already
+                // gone (a follow-up delete drew -1), and a deleted photo's .THM
+                // never appeared in the next listing. Do not delete it here:
+                // that is a second request on a channel that must stay quiet,
+                // and it always fails.
                 _ = try await client.send(.deleteFile, param: file.path)
-
-                // Remove the sidecar too, or the card fills with orphaned
-                // previews for media that no longer exists — but only if the
-                // listing actually reported one. Deleting a derived path that
-                // does not exist just draws -1/-13 from the camera.
-                if let derived = file.thumbnailPath {
-                    if let listed = sidecarPaths[derived.lowercased()] {
-                        _ = try? await client.send(.deleteFile, param: listed)
-                        sidecarPaths[derived.lowercased()] = nil
-                    } else {
-                        // Not an error — plenty of media has no sidecar — but
-                        // say so, since a silently skipped sidecar is otherwise
-                        // indistinguishable from one that was deleted.
-                        print("[files] no listed sidecar for \(file.name) (looked for \(derived))")
-                    }
-                }
 
                 files.removeAll { $0.id == file.id }
                 // The camera reuses filenames, so a stale cached preview would
