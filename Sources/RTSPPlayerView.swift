@@ -90,19 +90,30 @@ struct RTSPPlayerView: UIViewRepresentable {
         }
 
         func mediaPlayerStateChanged(_ notification: Notification) {
+            // VLC delivers state changes on its own thread. Reporting straight
+            // from here would mutate SwiftUI state off the main actor, which is
+            // most likely precisely when the network drops and VLC floods
+            // error transitions.
             guard let player else { return }
-            switch player.state {
-            case .playing, .buffering:
-                onStateChange?(.playing)
-            case .error:
-                print("[rtsp] player error for \(currentURL?.absoluteString ?? "-")")
-                onStateChange?(.failed)
-            default:
-                break
+            let state = player.state
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.player != nil else { return }
+                switch state {
+                case .playing, .buffering:
+                    self.onStateChange?(.playing)
+                case .error:
+                    print("[rtsp] player error for \(self.currentURL?.absoluteString ?? "-")")
+                    self.onStateChange?(.failed)
+                default:
+                    break
+                }
             }
         }
 
         func stop() {
+            // Clear the delegate before stopping: `stop()` itself drives state
+            // transitions, and a callback into a coordinator that is being
+            // torn down is the crash this guards against.
             player?.delegate = nil
             player?.stop()
             player?.drawable = nil
@@ -111,12 +122,19 @@ struct RTSPPlayerView: UIViewRepresentable {
         }
 
         deinit {
-            // VLC teardown must happen on the main thread.
+            // VLC teardown must happen on the main thread, but never with a
+            // synchronous hop: `DispatchQueue.main.sync` from a deinit that is
+            // already running on the main thread deadlocks outright, and that
+            // is exactly what happens when the camera drops its Wi-Fi and the
+            // player is released during SwiftUI's teardown.
+            //
+            // The delegate is cleared first so a state change cannot call back
+            // into a half-released coordinator, then the player is handed to
+            // the main queue to stop and release asynchronously.
+            player?.delegate = nil
             guard let player else { return }
-            if Thread.isMainThread {
+            DispatchQueue.main.async {
                 player.stop()
-            } else {
-                DispatchQueue.main.sync { player.stop() }
             }
         }
     }
