@@ -2,73 +2,128 @@ import SwiftUI
 
 struct DebugScannerView: View {
     @ObservedObject var client: YiCameraClient
-    
+    @State private var startId = "1"
+    @State private var endId = "500"
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case start, end }
+
     var body: some View {
-        VStack {
-            HStack {
-                Text("API Scanner")
-                    .font(.title2.bold())
-                Spacer()
-                
-                if client.isScanning {
-                    ProgressView()
-                        .padding(.trailing, 8)
-                }
-                
-                Button(action: {
-                    if client.isScanning {
-                        // For a real app, you might want to add a cancel mechanism.
-                        // For now, it will just run to completion or disconnect.
-                    } else {
-                        client.scanUndocumentedCommands(range: 1...500)
-                    }
-                }) {
-                    Text(client.isScanning ? "Scanning..." : "Start Scan")
-                        .fontWeight(.semibold)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(client.isScanning || !client.isConnected)
-            }
-            .padding()
-            
-            if !client.isConnected {
-                Text("Camera must be connected to run the scanner.")
-                    .foregroundColor(.orange)
-                    .font(.caption)
-                    .padding(.bottom)
-            }
-            
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if client.scanLogs.isEmpty {
-                            Text("No logs yet. Tap Start Scan to search for undocumented JSON commands.")
-                                .foregroundColor(.secondary)
-                                .italic()
-                        } else {
-                            ForEach(client.scanLogs.indices, id: \.self) { index in
-                                Text(client.scanLogs[index])
-                                    .font(.system(.caption, design: .monospaced))
-                                    .padding(8)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color(UIColor.secondarySystemBackground))
-                                    .cornerRadius(8)
-                                    .id(index)
-                            }
-                        }
-                    }
+        VStack(spacing: 0) {
+            NavigationLink {
+                DirectoryBrowserView(client: client)
+            } label: {
+                Label("Browse Filesystem", systemImage: "folder")
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
-                }
-                .onChange(of: client.scanLogs.count) { _ in
-                    if !client.scanLogs.isEmpty {
-                        withAnimation {
-                            // Auto-scroll to the latest log (which is at the top usually except the summary, or bottom depending on how we insert)
-                            // We insert discoveries at index 1, so top is fine.
-                        }
+                    .padding(.vertical, 12)
+            }
+            Divider()
+
+            NavigationLink {
+                FilesystemExplorerView(client: client)
+            } label: {
+                Label("Bulk Filesystem Walk", systemImage: "folder.badge.questionmark")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+            }
+            Divider()
+
+            controls
+
+            if !client.isConnected {
+                Label("Camera must be connected to run the scanner.",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.bottom, 8)
+            }
+
+            logList
+        }
+        .navigationTitle("Debug")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var controls: some View {
+        VStack(spacing: 12) {
+            Label(
+                "Probes undocumented commands. Unknown msg_ids can hang or reboot the camera's TCP server.",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack {
+                Text("Range:")
+                TextField("Start", text: $startId)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .focused($focusedField, equals: .start)
+                Text("to")
+                TextField("End", text: $endId)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .focused($focusedField, equals: .end)
+
+                Spacer()
+
+                if client.isScanning {
+                    Button("Stop", role: .destructive) { client.cancelScan() }
+                        .buttonStyle(.bordered)
+                } else {
+                    Button("Start") {
+                        focusedField = nil
+                        client.scanUndocumentedCommands(range: scanRange)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!client.isConnected)
                 }
+            }
+
+            if client.isScanning {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Scanning…").font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .navigationTitle("Debug Scanner")
+        .padding()
+    }
+
+    /// Clamps user input to a sane, ordered range.
+    private var scanRange: ClosedRange<Int> {
+        let start = max(1, Int(startId) ?? 1)
+        let end = min(max(start, Int(endId) ?? 500), 65535)
+        return start...end
+    }
+
+    private var logList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                if client.scanLogs.isEmpty {
+                    Text("No logs yet. Tap Start to search for undocumented commands.")
+                        .foregroundStyle(.secondary)
+                        .italic()
+                        .padding(.top)
+                } else {
+                    ForEach(Array(client.scanLogs.enumerated()), id: \.offset) { _, log in
+                        Text(log)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.secondarySystemBackground),
+                                        in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
     }
 }
