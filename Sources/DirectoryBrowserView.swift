@@ -50,7 +50,14 @@ struct DirectoryBrowserView: View {
                             size: 0, depth: 0
                         ))
                     } label: {
-                        Label("Save to Photos", systemImage: "square.and.arrow.down")
+                        // Files, never Photos — the browser reaches firmware
+                        // data the photo library would reject.
+                        Label("Save to Files", systemImage: "arrow.down.doc")
+                    }
+                    .disabled(!YiFile.isServedOverHTTP(path))
+                } footer: {
+                    if !YiFile.isServedOverHTTP(path) {
+                        Text("The camera only serves files from its SD card over HTTP, so this path cannot be downloaded.")
                     }
                 }
             } else if entries.isEmpty && errorText == nil && !isLoading {

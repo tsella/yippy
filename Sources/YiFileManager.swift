@@ -53,10 +53,30 @@ struct YiFile: Identifiable, Hashable {
     /// extracted rather than being decodable as an image.
     var thumbnailIsVideo: Bool { isVideo }
 
+    /// Maps a camera-side absolute path to its HTTP URL.
+    ///
+    /// The server is rooted at the SD card mount, so `/tmp/fuse_d/x.jpg` is
+    /// served as `/x.jpg`. Paths on other mounts have no HTTP route at all —
+    /// see `isServedOverHTTP`.
     static func httpURL(forCameraPath path: String) -> URL? {
-        let relative = path.replacingOccurrences(of: YiFileManager.mediaRoot, with: "")
+        var relative = path
+        if relative.hasPrefix(YiFileManager.mediaRoot) {
+            relative = String(relative.dropFirst(YiFileManager.mediaRoot.count))
+        }
+        // Trim any leading separator so the join cannot produce "//".
+        relative = String(relative.drop { $0 == "/" })
         let escaped = relative.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? relative
-        return URL(string: "http://192.168.42.1/\(escaped)")
+        return URL(string: "http://\(YiCameraClient.host)/\(escaped)")
+    }
+
+    /// Whether the camera's HTTP server can serve this path.
+    ///
+    /// Only the SD card mount is exposed. Firmware data on `/tmp/fuse_z/`,
+    /// `/var/`, `/oem/` and so on is listable over the control channel but has
+    /// no HTTP route, so a download can only 404 — the logo fetch failing on
+    /// all three candidate URLs is the same fact.
+    static func isServedOverHTTP(_ path: String) -> Bool {
+        path.hasPrefix(YiFileManager.mediaRoot)
     }
 
     var formattedSize: String {
@@ -334,6 +354,10 @@ class YiFileManager: ObservableObject {
                 self.downloadProgress = 0
             }
 
+            guard YiFile.isServedOverHTTP(file.path) else {
+                self.errorMessage = "The camera only serves files from its SD card over HTTP. \(file.name) is on internal storage and cannot be downloaded."
+                return
+            }
             guard let url = file.downloadURL else { return }
             self.downloadingFile = file
             self.downloadProgress = 0

@@ -68,8 +68,8 @@ final class RTSPProbe: ObservableObject {
         }
 
         var cseq = 1
-        func request(_ method: String, headers: [String] = []) async -> String? {
-            var lines = ["\(method) \(url.absoluteString) RTSP/1.0",
+        func request(_ method: String, target: String? = nil, headers: [String] = []) async -> String? {
+            var lines = ["\(method) \(target ?? url.absoluteString) RTSP/1.0",
                          "CSeq: \(cseq)",
                          "User-Agent: Yippy-Probe"]
             lines.append(contentsOf: headers)
@@ -106,48 +106,81 @@ final class RTSPProbe: ObservableObject {
             note("  sdp: \(line.trimmingCharacters(in: .whitespacesAndNewlines))")
         }
 
-        // The control URL for the first media track, per the SDP.
-        let track = Self.trackURL(sdp: sdp, base: url)
+        // The control URL for the first media track, resolved against
+        // Content-Base — a relative "track1" against the request URL 404s.
+        let track = Self.trackURL(sdp: sdp, describe: describe, base: url)
         note("  track: \(track)")
 
-        // 3. SETUP — request interleaved TCP so no UDP bind is needed.
-        guard let setup = await request(
-            "SETUP",
+        // 3a. SETUP over interleaved TCP. This camera answers 461, but try it
+        //     first: when a firmware does support it, no UDP bind is needed.
+        var session: String?
+        var interleaved = false
+        if let setup = await request(
+            "SETUP", target: track,
             headers: ["Transport: RTP/AVP/TCP;unicast;interleaved=0-1"]
-        ) else { return }
-
-        guard let session = Self.header("Session", in: setup)?
-            .split(separator: ";").first.map(String.init) else {
-            note("✗ No Session header — SETUP was refused.")
-            note("  This is where live555 would also fail.")
-            return
+        ), let id = Self.header("Session", in: setup)?
+            .split(separator: ";").first.map(String.init) {
+            session = id
+            interleaved = Self.header("Transport", in: setup)?.contains("interleaved") ?? false
+        } else {
+            note("⚠︎ Interleaved TCP refused (461). This firmware is UDP-only,")
+            note("  so --rtsp-tcp cannot help — VLC must bind a UDP socket.")
         }
-        note("  session: \(session)")
-        if let transport = Self.header("Transport", in: setup) {
-            note("  transport: \(transport)")
-            if !transport.contains("interleaved") {
-                note("⚠︎ Camera did not accept interleaved TCP — it wants UDP,")
-                note("  which is exactly what VLC cannot bind here.")
+
+        // 3b. Fall back to UDP, binding our own receive socket. live555 fails
+        //     here because it derives the local address via a multicast trick
+        //     that returns 0.0.0.0 on iOS. NWConnection has no such problem, so
+        //     this establishes whether the *camera* will stream over UDP.
+        var udpListener: NWListener?
+        if session == nil {
+            do {
+                let listener = try NWListener(using: .udp)
+                udpListener = listener
+                let port = try await Self.startListener(listener)
+                note("Bound local UDP port \(port) for RTP")
+
+                if let setup = await request(
+                    "SETUP", target: track,
+                    headers: ["Transport: RTP/AVP;unicast;client_port=\(port)-\(port + 1)"]
+                ), let id = Self.header("Session", in: setup)?
+                    .split(separator: ";").first.map(String.init) {
+                    session = id
+                    if let transport = Self.header("Transport", in: setup) {
+                        note("  transport: \(transport)")
+                    }
+                }
+            } catch {
+                note("✗ Could not bind a local UDP port: \(error.localizedDescription)")
             }
         }
 
-        // 4. PLAY — start the stream.
-        guard await request("PLAY", headers: ["Session: \(session)"]) != nil else { return }
+        guard let session else {
+            note("✗ SETUP refused for both transports — no session.")
+            return
+        }
+        note("  session: \(session)")
 
-        // 5. Read interleaved RTP frames for a few seconds.
+        // 4. PLAY.
+        guard await request("PLAY", target: track, headers: ["Session: \(session)"]) != nil else { return }
+
         note("Listening for RTP packets (5s)…")
-        await readInterleaved(connection, seconds: 5)
+        if interleaved {
+            await readInterleaved(connection, seconds: 5)
+        } else if let listener = udpListener {
+            await readUDP(listener, seconds: 5)
+        }
 
         if packetsReceived > 0 {
             note("✓ Received \(packetsReceived) RTP packets (\(bytesReceived) bytes).")
-            note("The camera streams fine over interleaved TCP — the failure is")
-            note("inside VLC, not the camera or the network.")
+            note("The camera streams fine over \(interleaved ? "TCP" : "UDP") —")
+            note("the failure is inside VLC's live555, not the camera.")
         } else {
             note("✗ No RTP packets arrived after PLAY.")
             note("The camera accepted the handshake but sends nothing.")
         }
 
-        _ = await request("TEARDOWN", headers: ["Session: \(session)"])
+        _ = await request("TEARDOWN", target: track, headers: ["Session: \(session)"])
+        udpListener?.cancel()
     }
 
     /// Reads `$<channel><length><payload>` frames until the deadline.
@@ -175,6 +208,55 @@ final class RTSPProbe: ObservableObject {
                 packetsReceived += 1
                 if packetsReceived == 1 { note("  first RTP packet: \(length) bytes") }
             }
+        }
+    }
+
+    /// Starts a UDP listener and reports the port it bound.
+    private static func startListener(_ listener: NWListener) async throws -> UInt16 {
+        try await withCheckedThrowingContinuation { continuation in
+            // Clearing the handler on the first terminal state resumes exactly
+            // once; it runs on the listener's own serial queue, so no lock is
+            // needed.
+            listener.stateUpdateHandler = { [weak listener] state in
+                switch state {
+                case .ready:
+                    listener?.stateUpdateHandler = nil
+                    continuation.resume(returning: listener?.port?.rawValue ?? 0)
+                case .failed(let error):
+                    listener?.stateUpdateHandler = nil
+                    continuation.resume(throwing: error)
+                default:
+                    break
+                }
+            }
+            listener.start(queue: .global(qos: .userInitiated))
+        }
+    }
+
+    /// Counts RTP datagrams arriving on the bound UDP port.
+    private func readUDP(_ listener: NWListener, seconds: TimeInterval) async {
+        let deadline = Date().addingTimeInterval(seconds)
+
+        listener.newConnectionHandler = { [weak self] connection in
+            connection.start(queue: .global(qos: .userInitiated))
+            func receiveNext() {
+                connection.receiveMessage { content, _, _, error in
+                    guard error == nil, let content, !content.isEmpty else { return }
+                    Task { @MainActor [weak self] in
+                        self?.packetsReceived += 1
+                        self?.bytesReceived += content.count
+                        if self?.packetsReceived == 1 {
+                            self?.note("  first RTP datagram: \(content.count) bytes")
+                        }
+                    }
+                    receiveNext()
+                }
+            }
+            receiveNext()
+        }
+
+        while Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(200))
         }
     }
 
@@ -257,17 +339,26 @@ final class RTSPProbe: ObservableObject {
         return String(message[range.upperBound...])
     }
 
-    /// Resolves the track control URL from the SDP's `a=control:` attribute.
-    private static func trackURL(sdp: String, base: URL) -> String {
-        for line in sdp.split(separator: "\n") {
+    /// Resolves the track control URL from the SDP.
+    ///
+    /// The per-track `a=control:` value is relative (`track1`) and must be
+    /// joined to `Content-Base`, not to the request URL — the camera reports
+    /// `rtsp://192.168.42.1/live/` there, so the track is
+    /// `rtsp://192.168.42.1/live/track1`. Ignoring Content-Base yields
+    /// `.../live` and a 404.
+    private static func trackURL(sdp: String, describe: String, base: URL) -> String {
+        let contentBase = header("Content-Base", in: describe)
+            ?? (base.absoluteString.hasSuffix("/") ? base.absoluteString : base.absoluteString + "/")
+
+        for line in sdp.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard trimmed.hasPrefix("a=control:") else { continue }
             let value = String(trimmed.dropFirst("a=control:".count))
             if value == "*" { continue }
             if value.hasPrefix("rtsp://") { return value }
-            return base.absoluteString + "/" + value
+            return contentBase.hasSuffix("/") ? contentBase + value : contentBase + "/" + value
         }
-        return base.absoluteString
+        return contentBase
     }
 
     private func note(_ message: String) {

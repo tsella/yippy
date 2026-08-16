@@ -10,6 +10,10 @@ struct RemoteFileView: View {
     let entry: FilesystemExplorer.Entry
     let onDownload: () -> Void
 
+    private var isDownloadable: Bool {
+        YiFile.isServedOverHTTP(entry.path)
+    }
+
     var body: some View {
         List {
             Section("File") {
@@ -33,8 +37,14 @@ struct RemoteFileView: View {
                 } label: {
                     Label("Save to Files", systemImage: "arrow.down.doc")
                 }
+                .disabled(!isDownloadable)
             } footer: {
-                Text("Saves to the Files app, under On My iPhone → Yippy!.")
+                // The camera's HTTP server only exposes the SD card, so
+                // firmware paths cannot be fetched at all. Say so rather than
+                // offering a button that can only 404.
+                Text(isDownloadable
+                     ? "Saves to the Files app, under On My iPhone → Yippy!."
+                     : "The camera only serves files from its SD card over HTTP, so this path cannot be downloaded.")
             }
         }
         .navigationTitle(entry.name)
