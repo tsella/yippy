@@ -184,8 +184,10 @@ struct DashboardView: View {
                     Text("PHOTO").font(.caption2.bold()).foregroundStyle(.white)
                 }
             }
-            .disabled(client.isRecording)
-            .opacity(client.isRecording ? 0.4 : 1)
+            // The camera wedges if a command arrives while it is writing a
+            // photo, so the controls stay locked until the capture completes.
+            .disabled(client.isRecording || client.isCapturing)
+            .opacity(client.isRecording || client.isCapturing ? 0.4 : 1)
             .accessibilityLabel("Take photo")
 
             Button {
@@ -212,6 +214,8 @@ struct DashboardView: View {
                     Text("VIDEO").font(.caption2.bold()).foregroundStyle(.white)
                 }
             }
+            .disabled(client.isCapturing)
+            .opacity(client.isCapturing ? 0.4 : 1)
             .accessibilityLabel(client.isRecording ? "Stop recording" : "Start recording")
         }
         .animation(.spring(duration: 0.25), value: client.isRecording)

@@ -61,6 +61,17 @@ class YiCameraClient: ObservableObject {
     /// never started it" from "the camera stopped it", which `vf_stop` alone
     /// cannot — the camera sends one spontaneously on connect.
     private var viewfinderRequested = false
+
+    /// True between `start_photo_capture` and the capture finishing.
+    ///
+    /// The camera is single-threaded while it writes a photo: sending another
+    /// command in that window wedges its TCP server, after which *every*
+    /// request times out until the camera is power-cycled. Observed on real
+    /// hardware — a RECORD_START issued during a capture killed the session.
+    @Published private(set) var isCapturing = false
+    /// Fails the capture open if the camera never reports completion, so a
+    /// missed notification cannot lock the UI out permanently.
+    private var captureWatchdog: Task<Void, Never>?
     /// Advertised by the START_SESSION response; falls back to the documented
     /// default if the firmware does not report one.
     @Published private(set) var streamURL = URL(string: "rtsp://192.168.42.1/live")!
@@ -317,9 +328,16 @@ class YiCameraClient: ObservableObject {
             isRecording = false
             // The file is only on the card once recording completes.
             mediaChangeCount += 1
+        case .startPhotoCapture:
+            // The camera is busy writing until it reports completion.
+            beginCapture()
+        case .preciseCaptureDataReady:
+            // Some firmwares end the sequence here and never send photo_taken.
+            endCapture()
         case .photoTaken:
             // `param` carries the path of the saved file on most firmwares.
             if let path = param as? String { lastCapturedPath = path }
+            endCapture()
             mediaChangeCount += 1
         case .viewfinderStart:
             isViewfinderActive = true
@@ -644,10 +662,11 @@ class YiCameraClient: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.heartbeatInterval)
                 guard !Task.isCancelled, let self, self.isConnected else { return }
-                // Don't contend with an in-flight scan, or with a long
-                // operation like FORMAT that leaves the card busy — polling
-                // through it just logs spurious -27 failures.
-                guard !self.isScanning, !self.isBusy else { continue }
+                // Don't contend with an in-flight scan, a long operation like
+                // FORMAT, or a capture. The camera is single-threaded while
+                // writing a photo, and a command sent in that window wedges its
+                // TCP server for the rest of the session.
+                guard !self.isScanning, !self.isBusy, !self.isCapturing else { continue }
                 do {
                     try await self.refreshBatteryLevel()
                 } catch is CancellationError {
@@ -659,13 +678,35 @@ class YiCameraClient: ObservableObject {
         }
     }
 
+    // MARK: - Capture gating
+
+    private func beginCapture() {
+        isCapturing = true
+        captureWatchdog?.cancel()
+        captureWatchdog = Task { [weak self] in
+            // The camera does not always report completion. Without this the
+            // shutter would stay disabled for the rest of the session.
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            self?.isCapturing = false
+        }
+    }
+
+    private func endCapture() {
+        captureWatchdog?.cancel()
+        captureWatchdog = nil
+        isCapturing = false
+    }
+
     // MARK: - Camera actions
 
     func takePhoto() {
+        guard !isCapturing else { return }
         perform(.takePhoto, failureMessage: "Could not take photo")
     }
 
     func startRecording() {
+        guard !isCapturing else { return }
         perform(.recordStart, failureMessage: "Could not start recording") { [weak self] in
             self?.isRecording = true
         }

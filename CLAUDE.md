@@ -74,6 +74,20 @@ The `START_SESSION` (257) response advertises the stream URL in its `rtsp`
 field; prefer it over hardcoding. Track liveness via the `vf_start`/`vf_stop`
 notifications and only mount the player while the viewfinder is active.
 
+### The camera wedges if you talk to it mid-capture
+
+**Observed on real hardware.** After `TAKE_PHOTO`, the camera emits
+`start_photo_capture` and is single-threaded until the capture completes. Any
+command sent in that window — including the 5-second heartbeat — kills its TCP
+server: every subsequent request times out, and the camera eventually drops its
+Wi-Fi entirely (`EADDRNOTAVAIL 49` / "No network route"). Only a power cycle
+recovers it.
+
+`isCapturing` gates the shutter, the record button and the heartbeat between
+`start_photo_capture` and `photo_taken`/`precise_capture_data_ready`. Some
+firmwares never send a completion notification, so a watchdog clears the flag
+after 8s rather than locking the UI out for the session.
+
 `msg_id` **7 is a camera-initiated notification**, never a request. It has no
 matching outstanding request, so it must not be routed through the
 request/response continuation map.
@@ -162,8 +176,10 @@ The `1282` listing returns both as ordinary entries, so:
   the (small) clip is downloaded to `temporaryDirectory` and deleted after.
   Photos fall back to the original when no `.THM` exists.
 - **Delete the sidecar with its media**, or the card accumulates orphans for
-  content that no longer exists. Best-effort: the media file is already gone, so
-  a failed sidecar delete is not worth surfacing.
+  content that no longer exists. **Only delete a sidecar the listing actually
+  reported** — the path can be derived from the media name, but deriving it does
+  not mean the file exists, and deleting a non-existent path draws `-1` or `-13`
+  from the camera. `YiFileManager.sidecarPaths` records what was listed.
 
 ## App Transport Security
 
