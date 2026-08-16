@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -66,19 +67,13 @@ final class ThumbnailLoader: ObservableObject {
         cache.object(forKey: file.path as NSString)
     }
 
-    /// Fetches a downsampled preview.
+    /// Fetches a downsampled preview from the camera's sidecar.
     ///
-    /// Prefers the camera's `.THM` sidecar — a small JPEG written beside every
-    /// photo *and* video, so videos get a real preview without downloading
-    /// hundreds of megabytes. Falls back to the original for photos when no
-    /// sidecar exists.
+    /// Photos have a `.THM` JPEG; videos have a short `_thm.mp4` clip, whose
+    /// first frame is extracted. Either way the sidecar is small, so a video
+    /// preview never costs a multi-hundred-megabyte download. Photos fall back
+    /// to the original when no sidecar exists.
     func thumbnail(for file: YiFile) async -> UIImage? {
-        // Sidecar first, then the original for photos. Videos have no fallback:
-        // decoding a frame would mean fetching the whole file.
-        let candidates = [file.thumbnailURL, file.isVideo ? nil : file.downloadURL]
-            .compactMap { $0 }
-        guard !candidates.isEmpty else { return nil }
-
         let key = file.path
         if let hit = cache.object(forKey: key as NSString) { return hit }
         if let existing = inFlight[key] { return await existing.value }
@@ -88,19 +83,61 @@ final class ThumbnailLoader: ObservableObject {
             await self.acquireSlot()
             defer { self.releaseSlot(); self.inFlight[key] = nil }
 
-            for url in candidates {
-                guard !Task.isCancelled else { return nil }
-                guard let data = await Self.fetch(url, timeout: 20),
-                      let image = Self.downsampled(data) else { continue }
-                self.cache.setObject(image, forKey: key as NSString,
-                                     cost: Int(image.size.width * image.size.height * 4))
-                return image
-            }
-            return nil
+            guard !Task.isCancelled else { return nil }
+            let image = file.isVideo
+                ? await Self.videoFrame(from: file)
+                : await Self.stillImage(from: file)
+
+            guard let image else { return nil }
+            self.cache.setObject(image, forKey: key as NSString,
+                                 cost: Int(image.size.width * image.size.height * 4))
+            return image
         }
 
         inFlight[key] = task
         return await task.value
+    }
+
+    /// Photo preview: the `.THM` sidecar, or the original if there is none.
+    private nonisolated static func stillImage(from file: YiFile) async -> UIImage? {
+        for url in [file.thumbnailURL, file.downloadURL].compactMap({ $0 }) {
+            if let data = await fetch(url, timeout: 20),
+               let image = downsampled(data) {
+                return image
+            }
+        }
+        return nil
+    }
+
+    /// Video preview: first frame of the `_thm.mp4` sidecar.
+    ///
+    /// `AVAssetImageGenerator` needs a local file — pointing it at the camera's
+    /// HTTP server works in principle but re-fetches ranges over a slow link,
+    /// so the sidecar (a few hundred KB) is downloaded first and deleted after.
+    private nonisolated static func videoFrame(from file: YiFile) async -> UIImage? {
+        guard let url = file.thumbnailURL,
+              let data = await fetch(url, timeout: 30) else { return nil }
+
+        let temporary = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension((url.lastPathComponent as NSString).pathExtension)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+
+        do {
+            try data.write(to: temporary)
+        } catch {
+            return nil
+        }
+
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: temporary))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: maxPixelSize, height: maxPixelSize)
+        // The clip is short; clamp generously so a keyframe is always found.
+        generator.requestedTimeToleranceBefore = .positiveInfinity
+        generator.requestedTimeToleranceAfter = .positiveInfinity
+
+        guard let cgImage = try? await generator.image(at: .zero).image else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 
     /// Fetches a URL from the camera's HTTP file server.
@@ -247,6 +284,17 @@ struct ThumbnailView: View {
                     // .fit, not .fill: the frame already matches the image's
                     // ratio, so filling would crop for no reason.
                     .scaledToFit()
+                    .overlay(alignment: .bottomLeading) {
+                        // A video preview is a still frame, so it needs a badge
+                        // to distinguish it from a photo.
+                        if file.isVideo {
+                            Image(systemName: "play.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(.white)
+                                .shadow(radius: 2)
+                                .padding(6)
+                        }
+                    }
             } else {
                 VStack(spacing: 6) {
                     Image(systemName: icon)
@@ -264,10 +312,11 @@ struct ThumbnailView: View {
         .task(id: file.path) { await load() }
     }
 
-    /// Videos have no preview, so the icon is the final state, not a fallback.
+    /// Shown only until a preview loads — videos now have one too, extracted
+    /// from the `_thm.mp4` sidecar.
     private var icon: String {
-        if file.isVideo { return "video.fill" }
-        return failed ? "photo.badge.exclamationmark" : "photo.fill"
+        if failed { return file.isVideo ? "video.slash" : "photo.badge.exclamationmark" }
+        return file.isVideo ? "video.fill" : "photo.fill"
     }
 
     private func load() async {

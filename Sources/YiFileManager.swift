@@ -10,34 +10,48 @@ struct YiFile: Identifiable, Hashable {
     let size: Int64
     let date: Date?
 
-    /// Path of the camera's `.THM` sidecar, if this entry has one.
+    /// The camera writes a preview file beside every capture, in one of two
+    /// forms depending on the media type:
     ///
-    /// The camera writes a small JPEG thumbnail beside every photo and video,
-    /// named after the same basename (`YDXJ0182.mp4` → `YDXJ0182.THM`). These
-    /// are listed as separate directory entries but are not media in their own
-    /// right, so they are hidden from the gallery and used as previews instead.
-    var thumbnailPath: String? {
-        guard !isThumbnail else { return nil }
-        return (path as NSString).deletingPathExtension + ".THM"
+    ///  - photos get a JPEG:  `YDXJ0183.jpg` → `YDXJ0183.THM`
+    ///  - videos get a short clip: `YDXJ0182.mp4` → `YDXJ0182_thm.mp4`
+    ///
+    /// Both are listed as ordinary directory entries, so both must be hidden
+    /// from the gallery — a `_thm.mp4` would otherwise appear as a second,
+    /// tiny video next to every real one.
+    var isThumbnail: Bool {
+        let stem = (name as NSString).deletingPathExtension
+        return (name as NSString).pathExtension.caseInsensitiveCompare("thm") == .orderedSame
+            || stem.lowercased().hasSuffix("_thm")
     }
 
-    var isThumbnail: Bool {
-        (name as NSString).pathExtension.caseInsensitiveCompare("thm") == .orderedSame
+    /// Path of this file's preview sidecar, if it has one.
+    var thumbnailPath: String? {
+        guard !isThumbnail else { return nil }
+        let stem = (path as NSString).deletingPathExtension
+        // Video previews keep the container extension; photo previews are .THM.
+        return isVideo ? "\(stem)_thm.\((path as NSString).pathExtension)" : "\(stem).THM"
     }
 
     var isVideo: Bool {
-        ["mp4", "mov", "avi"].contains((name as NSString).pathExtension.lowercased())
+        Self.videoExtensions.contains((name as NSString).pathExtension.lowercased())
     }
+
+    private static let videoExtensions: Set<String> = ["mp4", "mov", "avi"]
 
     /// Media is served over plain HTTP, rooted at the SD card mount point.
     var downloadURL: URL? {
         Self.httpURL(forCameraPath: path)
     }
 
-    /// URL of the `.THM` sidecar, used for gallery previews.
+    /// URL of the preview sidecar, used for gallery thumbnails.
     var thumbnailURL: URL? {
         thumbnailPath.flatMap(Self.httpURL(forCameraPath:))
     }
+
+    /// Whether the preview sidecar is itself a video, and so needs a frame
+    /// extracted rather than being decodable as an image.
+    var thumbnailIsVideo: Bool { isVideo }
 
     static func httpURL(forCameraPath path: String) -> URL? {
         let relative = path.replacingOccurrences(of: YiFileManager.mediaRoot, with: "")

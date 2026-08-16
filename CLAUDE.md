@@ -140,21 +140,30 @@ which is also the only place the camera protocol can actually be exercised.
 `YiCameraClient` is `@MainActor` and owns all connection state; views observe it
 and never touch the socket directly.
 
-## `.THM` thumbnail sidecars
+## Thumbnail sidecars
 
-The camera writes a small JPEG beside every photo **and video**, sharing the
-basename: `YDXJ0182.mp4` → `YDXJ0182.THM`. The `1282` listing returns them as
-ordinary entries, so:
+The camera writes a preview beside every capture, in **two different forms**:
 
-- **Filter them out of the gallery** (`YiFile.isThumbnail`) or the list doubles
-  in length and fills with tiny duplicates.
-- **Use them as previews.** They are the only practical way to preview a video —
+| Media | Sidecar | Preview |
+| --- | --- | --- |
+| `YDXJ0183.jpg` | `YDXJ0183.THM` | JPEG, decoded directly |
+| `YDXJ0182.mp4` | `YDXJ0182_thm.mp4` | short clip; extract frame 0 |
+
+The `1282` listing returns both as ordinary entries, so:
+
+- **Filter them out of the gallery** (`YiFile.isThumbnail`, which matches the
+  `.THM` extension *and* a `_thm` filename suffix) or the list doubles in length
+  — a `_thm.mp4` otherwise shows up as a second tiny video beside every real one.
+  Match the suffix on the extension-stripped stem, not as a substring, so a file
+  genuinely named `thumb.mp4` is not swallowed.
+- **Use them as previews.** This is the only practical way to preview a video —
   the alternative is downloading hundreds of megabytes to decode one frame.
-  `ThumbnailLoader` prefers the sidecar and falls back to the original (photos
-  only) when one is missing.
-- **Delete the sidecar with its media**, or the card accumulates orphaned `.THM`
-  files for content that no longer exists. Best-effort: the media file is
-  already gone, so a failed sidecar delete is not worth surfacing.
+  Video sidecars need `AVAssetImageGenerator`, which requires a local file, so
+  the (small) clip is downloaded to `temporaryDirectory` and deleted after.
+  Photos fall back to the original when no `.THM` exists.
+- **Delete the sidecar with its media**, or the card accumulates orphans for
+  content that no longer exists. Best-effort: the media file is already gone, so
+  a failed sidecar delete is not worth surfacing.
 
 ## Downloads
 

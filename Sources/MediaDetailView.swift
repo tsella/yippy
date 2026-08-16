@@ -168,7 +168,7 @@ struct MediaDetailView: View {
             }
             .buttonStyle(.borderedProminent)
 
-            Text("Playback in the app is not supported — save the video to view it.")
+            Text("This is the camera's preview frame. Save the video to play it.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
