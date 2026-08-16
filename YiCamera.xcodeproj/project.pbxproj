@@ -15,16 +15,15 @@
 		2619167C96544D2BDF7A1562 /* YiCameraClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC034362676E0A6C69CCFC9 /* YiCameraClient.swift */; };
 		2BC7F7FED101312F5A192784 /* YiCameraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 883499D348C4B9A7B24457F9 /* YiCameraApp.swift */; };
 		2FEF1B7E58DEC124C7328E01 /* ConnectionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04A51F89E5FDBB57DAAA836B /* ConnectionWizardView.swift */; };
-		321D4D2A79BAF9A0F6F2A668 /* RTSPProbeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C765062CB0D3EBB3916CDE9 /* RTSPProbeView.swift */; };
 		38F4F948456A9C2F194ED1F8 /* RemoteFileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44219CE763C068CF7BFD0C4 /* RemoteFileView.swift */; };
 		3BF2465909C09AC56EF3B7B9 /* RTSPStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386A8A55E950CE50CE06867D /* RTSPStream.swift */; };
 		402CA5DA13290DD1946CB28E /* CameraSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A412C540BA2156818B49EE9F /* CameraSettingsView.swift */; };
 		4E778DDF84B4EE0403CF62AD /* H264StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D8F2F2BEF33D2A6C64274A6 /* H264StreamView.swift */; };
 		5268C4AC8711904F8A9C08AD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E321081365BC432AED1F02B /* SettingsView.swift */; };
 		6514808DDCA5B736F72BDB14 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1EE1BE6695B44B76AD53E06 /* DashboardView.swift */; };
+		68DAC72D844C6CD4363492AD /* RTPDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FC6BA1878559E45BC88325D /* RTPDecoder.swift */; };
 		6CA7BB44303AEE4DBD5373FB /* FilesystemExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C98BACB6F7D7E8EC5A182C /* FilesystemExplorer.swift */; };
 		7A353AB11810A8CC7B6B289B /* MediaGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */; };
-		7A5CEAB1B4A7D45E4CEC6DAE /* RTSPProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69DE18678DDD6B9B0A393B39 /* RTSPProbe.swift */; };
 		8024B63461D05993FF7CB22A /* Pods_YiCamera.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 45E7620174EF1018C5F35DF6 /* Pods_YiCamera.framework */; };
 		87C7B784C91A8AF62F28A03E /* DirectoryBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671753AA31C7C94F62615B93 /* DirectoryBrowserView.swift */; };
 		88E443CAC288BDA7F0AC6E58 /* ConfirmationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14421FCF5C9AD1BE6B2EA6B2 /* ConfirmationOverlay.swift */; };
@@ -34,7 +33,6 @@
 		C6B363D1324C9B1748CEAD2B /* YiFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D9963AC4352A77659468007 /* YiFileManager.swift */; };
 		D02716A320B8777792B20318 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FBACEADC17BB02EAED492583 /* Assets.xcassets */; };
 		D7106146FD97D9079BDD1378 /* ThumbnailCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9048F73D8BEF0DECEB4C984C /* ThumbnailCache.swift */; };
-		DD51930D8FADE26C2C954846 /* FilesystemExplorerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39DB018D649AD4FF4A918AB /* FilesystemExplorerView.swift */; };
 		E5A9E8F9A117050CDFB86C84 /* MediaDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C03CA163D76352321562BB /* MediaDetailView.swift */; };
 		F9713D0E111A2AD68FA7F3CF /* PhotoLibrarySaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635756632B5C6973919E67A1 /* PhotoLibrarySaver.swift */; };
 /* End PBXBuildFile section */
@@ -69,16 +67,15 @@
 		2D9963AC4352A77659468007 /* YiFileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiFileManager.swift; sourceTree = "<group>"; };
 		2EA1D69D3E81FF6F35F81BF0 /* RemoteImageView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteImageView.swift; path = RemoteImageView.swift; sourceTree = "<group>"; };
 		2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGalleryView.swift; sourceTree = "<group>"; };
+		2FC6BA1878559E45BC88325D /* RTPDecoder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RTPDecoder.swift; path = RTPDecoder.swift; sourceTree = "<group>"; };
 		386A8A55E950CE50CE06867D /* RTSPStream.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RTSPStream.swift; path = RTSPStream.swift; sourceTree = "<group>"; };
 		3D8F2F2BEF33D2A6C64274A6 /* H264StreamView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = H264StreamView.swift; path = H264StreamView.swift; sourceTree = "<group>"; };
 		41C775176A2EA4162BD25AB0 /* H264Depacketizer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = H264Depacketizer.swift; path = H264Depacketizer.swift; sourceTree = "<group>"; };
 		45E7620174EF1018C5F35DF6 /* Pods_YiCamera.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YiCamera.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		46DE48B702625215760DA914 /* AmbarellaProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbarellaProtocol.swift; sourceTree = "<group>"; };
 		50BC81AA1F6746540BD574A2 /* Pods-YiCamera.release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Pods-YiCamera.release.xcconfig"; sourceTree = "<group>"; };
-		5C765062CB0D3EBB3916CDE9 /* RTSPProbeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RTSPProbeView.swift; path = RTSPProbeView.swift; sourceTree = "<group>"; };
 		635756632B5C6973919E67A1 /* PhotoLibrarySaver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PhotoLibrarySaver.swift; path = PhotoLibrarySaver.swift; sourceTree = "<group>"; };
 		671753AA31C7C94F62615B93 /* DirectoryBrowserView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DirectoryBrowserView.swift; path = DirectoryBrowserView.swift; sourceTree = "<group>"; };
-		69DE18678DDD6B9B0A393B39 /* RTSPProbe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RTSPProbe.swift; path = RTSPProbe.swift; sourceTree = "<group>"; };
 		6E321081365BC432AED1F02B /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		74B0D6706E9F21C6DBED83E1 /* ThumbnailLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ThumbnailLoader.swift; path = ThumbnailLoader.swift; sourceTree = "<group>"; };
 		84C03CA163D76352321562BB /* MediaDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MediaDetailView.swift; path = MediaDetailView.swift; sourceTree = "<group>"; };
@@ -89,7 +86,6 @@
 		A412C540BA2156818B49EE9F /* CameraSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraSettingsView.swift; path = CameraSettingsView.swift; sourceTree = "<group>"; };
 		A44219CE763C068CF7BFD0C4 /* RemoteFileView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteFileView.swift; path = RemoteFileView.swift; sourceTree = "<group>"; };
 		AAB77ACF6B8F4024BB321562 /* Pods-YiCamera.debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Pods-YiCamera.debug.xcconfig"; sourceTree = "<group>"; };
-		D39DB018D649AD4FF4A918AB /* FilesystemExplorerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FilesystemExplorerView.swift; path = FilesystemExplorerView.swift; sourceTree = "<group>"; };
 		F4DBF1FA894CB94630DE4EDD /* Pods-YiCamera.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YiCamera.release.xcconfig"; path = "Target Support Files/Pods-YiCamera/Pods-YiCamera.release.xcconfig"; sourceTree = "<group>"; };
 		FBACEADC17BB02EAED492583 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -187,7 +183,6 @@
 				0CC034362676E0A6C69CCFC9 /* YiCameraClient.swift */,
 				2D9963AC4352A77659468007 /* YiFileManager.swift */,
 				23C98BACB6F7D7E8EC5A182C /* FilesystemExplorer.swift */,
-				D39DB018D649AD4FF4A918AB /* FilesystemExplorerView.swift */,
 				671753AA31C7C94F62615B93 /* DirectoryBrowserView.swift */,
 				74B0D6706E9F21C6DBED83E1 /* ThumbnailLoader.swift */,
 				A412C540BA2156818B49EE9F /* CameraSettingsView.swift */,
@@ -197,11 +192,10 @@
 				9048F73D8BEF0DECEB4C984C /* ThumbnailCache.swift */,
 				2EA1D69D3E81FF6F35F81BF0 /* RemoteImageView.swift */,
 				A44219CE763C068CF7BFD0C4 /* RemoteFileView.swift */,
-				69DE18678DDD6B9B0A393B39 /* RTSPProbe.swift */,
-				5C765062CB0D3EBB3916CDE9 /* RTSPProbeView.swift */,
 				41C775176A2EA4162BD25AB0 /* H264Depacketizer.swift */,
 				3D8F2F2BEF33D2A6C64274A6 /* H264StreamView.swift */,
 				386A8A55E950CE50CE06867D /* RTSPStream.swift */,
+				2FC6BA1878559E45BC88325D /* RTPDecoder.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -325,7 +319,6 @@
 				2619167C96544D2BDF7A1562 /* YiCameraClient.swift in Sources */,
 				C6B363D1324C9B1748CEAD2B /* YiFileManager.swift in Sources */,
 				6CA7BB44303AEE4DBD5373FB /* FilesystemExplorer.swift in Sources */,
-				DD51930D8FADE26C2C954846 /* FilesystemExplorerView.swift in Sources */,
 				87C7B784C91A8AF62F28A03E /* DirectoryBrowserView.swift in Sources */,
 				89E34CAA8E40839A46CE92AD /* ThumbnailLoader.swift in Sources */,
 				402CA5DA13290DD1946CB28E /* CameraSettingsView.swift in Sources */,
@@ -335,11 +328,10 @@
 				D7106146FD97D9079BDD1378 /* ThumbnailCache.swift in Sources */,
 				B29B64E26FBE69D9CCF00AD4 /* RemoteImageView.swift in Sources */,
 				38F4F948456A9C2F194ED1F8 /* RemoteFileView.swift in Sources */,
-				7A5CEAB1B4A7D45E4CEC6DAE /* RTSPProbe.swift in Sources */,
-				321D4D2A79BAF9A0F6F2A668 /* RTSPProbeView.swift in Sources */,
 				0A2D760C57FC16F0B48E29C2 /* H264Depacketizer.swift in Sources */,
 				4E778DDF84B4EE0403CF62AD /* H264StreamView.swift in Sources */,
 				3BF2465909C09AC56EF3B7B9 /* RTSPStream.swift in Sources */,
+				68DAC72D844C6CD4363492AD /* RTPDecoder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -78,38 +78,6 @@ class YiCameraClient: ObservableObject {
     /// cannot — the camera sends one spontaneously on connect.
     private var viewfinderRequested = false
 
-    /// True while something holds the camera's RTSP session.
-    ///
-    /// **The firmware serves one RTSP session at a time.** The viewfinder and
-    /// the debug probe both take it, and whichever loses gets a refused SETUP
-    /// on a half-closed socket — observed as `461` followed by
-    /// `error 96 - No message available on STREAM`. They must be exclusive.
-    @Published private(set) var streamSessionHolder: StreamSessionHolder?
-    var isStreamSessionHeld: Bool { streamSessionHolder != nil }
-
-    /// Claims the camera's single RTSP session for `holder`.
-    ///
-    /// Idempotent for the current holder: SwiftUI remounts the viewfinder on
-    /// every `vf_stop`/`vf_start` (record cycles, camera restarts), and the new
-    /// view's `onAppear` can run before the old one's `onDisappear`. Keying on
-    /// the holder means a remount re-claims rather than being refused, and a
-    /// stale release cannot free a session someone else now owns.
-    func claimStreamSession(_ holder: StreamSessionHolder) -> Bool {
-        guard streamSessionHolder == nil || streamSessionHolder == holder else { return false }
-        streamSessionHolder = holder
-        return true
-    }
-
-    func releaseStreamSession(_ holder: StreamSessionHolder) {
-        guard streamSessionHolder == holder else { return }
-        streamSessionHolder = nil
-    }
-
-    enum StreamSessionHolder: String {
-        case viewfinder
-        case probe
-    }
-
 
     /// True between `start_photo_capture` and the capture finishing.
     ///
@@ -238,9 +206,6 @@ class YiCameraClient: ObservableObject {
         isScanning = false
         isViewfinderActive = false
         viewfinderRequested = false
-        // Nobody can be holding the camera's RTSP session across a disconnect,
-        // and leaving it claimed would disable the probe for the next one.
-        streamSessionHolder = nil
         // Release both gates, or requests parked behind them would hang
         // forever after a disconnect instead of failing with notConnected.
         endCapture()

@@ -83,18 +83,11 @@ struct DashboardView: View {
                     // viewfinder claims it and the debug probe is locked out
                     // while it is mounted.
                     H264StreamView(stream: stream)
-                        .onAppear {
-                            // The camera stops the viewfinder while recording
-                            // and on restart, so this remounts often. Claiming
-                            // is idempotent for the viewfinder, so a remount
-                            // re-claims rather than being refused.
-                            guard client.claimStreamSession(.viewfinder) else { return }
-                            stream.start(url: client.streamURL)
-                        }
-                        .onDisappear {
-                            stream.stop()
-                            client.releaseStreamSession(.viewfinder)
-                        }
+                        // The camera stops the viewfinder while recording and
+                        // on restart, so this remounts often. `start` is a
+                        // no-op while a stream is already running.
+                        .onAppear { stream.start(url: client.streamURL) }
+                        .onDisappear { stream.stop() }
 
                     if case .failed(let reason) = stream.state {
                         VStack(spacing: 12) {

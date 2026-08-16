@@ -122,6 +122,26 @@ Three further things this gets wrong easily, all observed on hardware:
 Only the *first* packet has a deadline (10s). After that a gap is a dropped
 datagram, not a dead stream, and must not tear the session down.
 
+### Depacketisation runs off the main actor
+
+`RTSPStream` is `@MainActor` because it publishes state and drives an
+`AVSampleBufferDisplayLayer`, which must be touched on the main thread. But the
+RTP work is pure byte manipulation, and leaving it on the main actor put a
+`subdata` copy, an AVCC rebuild and an allocation on the UI thread for **every
+datagram** — thousands per session, at frame rate.
+
+`RTPDecoder` is an actor owning the depacketiser; `readRTP` is `nonisolated` so
+the read loop runs off-main too. Only completed access units hop back, via
+`display(_:isFirst:)` — one hop per *frame* instead of one per *packet*.
+
+Two ordering traps when changing this:
+
+- **Reset the decoder inside `run()`, not `start()`.** A detached
+  `Task { await decoder.reset() }` races the first read.
+- **Seed the decoder with the SDP's parameter sets.** Otherwise the first
+  in-band repeat of those same sets reads as a change and rebuilds the format
+  description on the first IDR for nothing.
+
 **Confirmed working on hardware**: 571 frames decoded across a recording cycle,
 reconnecting cleanly afterwards. A healthy run looks like:
 
@@ -158,19 +178,17 @@ notifications and only mount the player while the viewfinder is active.
 
 ### The camera serves one RTSP session at a time
 
-**The viewfinder and the debug probe cannot both hold it.** Whichever loses gets
-a refused `SETUP` on a half-closed socket — observed on hardware as `461
-Unsupported Transport` (the probe's TCP attempt) followed by
-`error 96 - No message available on STREAM` when the UDP retry is written to a
-socket the camera has already sent `RST` on. Every probe run in that state
-poisons the real viewfinder too.
+`RTSPStream` is the only consumer, so nothing arbitrates for it — `start()` is a
+no-op while a stream is already running, and that is the whole mechanism. **If a
+second consumer is ever added, it must be made exclusive with the viewfinder**:
+two clients racing `SETUP` leaves the loser on a half-closed socket, observed as
+`461 Unsupported Transport` followed by `error 96 - No message available on
+STREAM` when the retry is written to a connection the camera has already `RST`.
 
-`YiCameraClient.claimStreamSession()` / `releaseStreamSession()` arbitrate:
-`DashboardView` claims on mount, `RTSPProbeView` is disabled while the claim is
-held and hands it back when `probe.isRunning` clears. **A probe that leaves the
-session claimed locks the viewfinder out for the rest of the connection**, so
-the release is driven by `onChange` and `onDisappear` rather than the success
-path alone.
+A debug probe used to exist for exactly this diagnosis and was removed once
+`RTSPStream` began logging its own handshake — it duplicated ~115 lines of RTSP
+plumbing and was the second consumer that made arbitration necessary in the
+first place.
 
 ### Recording stops the viewfinder — ask for it back
 
@@ -376,6 +394,7 @@ verified there** — protocol changes need a device and a powered-on camera.
 | `Sources/YiCameraClient.swift` | TCP socket, session token, request routing |
 | `Sources/YiFileManager.swift` | Listing, deleting, downloading media |
 | `Sources/RTSPStream.swift` | Native RTSP/UDP client and RTP receive path |
+| `Sources/RTPDecoder.swift` | Actor running depacketisation off the main thread |
 | `Sources/H264Depacketizer.swift` | RFC 6184 depacketiser (single NAL, STAP-A, FU-A) |
 | `Sources/H264StreamView.swift` | `AVSampleBufferDisplayLayer` viewfinder |
 | `Sources/*View.swift` | SwiftUI screens |
@@ -505,19 +524,18 @@ Observed on real hardware, not documented upstream:
 - **The API scanner is destructive.** `scanUndocumentedCommands` sweeps unknown
   `msg_id`s, and unknown commands can hang or reboot the camera's TCP server.
   Keep it behind the debug toggle and keep the inter-command delay.
-- **The filesystem explorer walks breadth-first, by depth — never recursively.**
+- **`FilesystemExplorer` is the listing layer; `DirectoryBrowserView` is the UI.**
   `1282` lists any path, not just `DCIM`, so the camera's whole Linux root is
-  reachable. `FilesystemExplorer` lists every directory at depth N before any at
-  N+1, which bounds the blast radius of each extra level.
-  **Nothing is excluded by path** — `/proc`, `/sys` and `/dev` are walked too,
-  by design. Only three things stop it running away: the depth limit, the
-  entry/per-level caps, and the `visited` set. That set plus the `.`/`..` filter
-  are not policy — without them a symlink cycle such as `/proc/self/cwd` never
-  terminates. The inter-request delay is likewise load-bearing; don't remove it.
-  Directories are inferred by *failing* to parse a `"<size> bytes|<date>"`
-  value, since firmwares report them inconsistently.
-- `DirectoryBrowserView` is the interactive counterpart: one `1282` per tap,
-  drilling down via `NavigationLink`. Prefer it over raising the walk depth.
+  reachable. The browser issues one `1282` per tap, drilling down via
+  `NavigationLink`. Directories are inferred by *failing* to parse a
+  `"<size> bytes|<date>"` value, since firmwares report them inconsistently.
+- **`explore()` — the bulk breadth-first walk — has no UI any more**, but the
+  method remains. If it is ever re-exposed, its guards are load-bearing, not
+  stylistic: **nothing is excluded by path** (`/proc`, `/sys` and `/dev` are
+  walked by design), so only the depth limit, the entry/per-level caps and the
+  `visited` set stop it running away. That set plus the `.`/`..` filter are what
+  make a symlink cycle such as `/proc/self/cwd` terminate at all, and the
+  inter-request delay is what keeps the camera's TCP server alive.
 - **Never strip the trailing slash from a directory path.** The camera marks
   directories with one (`tmp/`, `fuse_z/`), and it is not cosmetic: listing
   `/tmp` kills the camera's TCP server outright, while `/tmp/` lists fine.

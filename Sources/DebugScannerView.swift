@@ -21,26 +21,6 @@ struct DebugScannerView: View {
             }
             Divider()
 
-            NavigationLink {
-                FilesystemExplorerView(client: client, fileManager: fileManager)
-            } label: {
-                Label("Bulk Filesystem Walk", systemImage: "folder.badge.questionmark")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-            }
-            Divider()
-
-            NavigationLink {
-                RTSPProbeView(client: client)
-            } label: {
-                Label("RTSP Probe", systemImage: "waveform.path")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-            }
-            Divider()
-
             controls
 
             if !client.isConnected {

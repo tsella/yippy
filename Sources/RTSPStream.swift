@@ -24,10 +24,6 @@ final class RTSPStream: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var framesDecoded = 0
 
-    /// Whether a stream is currently held open. The camera serves one RTSP
-    /// session at a time, so the debug probe must not run concurrently.
-    var isActive: Bool { task != nil }
-
     /// Every handshake step is logged. A failure before the first frame is
     /// otherwise invisible — the only previous output was on success, which
     /// made a silent failure indistinguishable from never having started.
@@ -41,7 +37,8 @@ final class RTSPStream: ObservableObject {
     private var session: String?
     private var task: Task<Void, Never>?
     private var keepAlive: Task<Void, Never>?
-    private var depacketizer = H264Depacketizer()
+    /// Owns the depacketiser and runs it off the main actor.
+    private let decoder = RTPDecoder()
     private weak var view: H264StreamLayerView?
 
     /// What the layer is currently configured with. Re-applied when a view
@@ -51,9 +48,6 @@ final class RTSPStream: ObservableObject {
     /// The true frame count; `framesDecoded` mirrors it at most once a second.
     private var frameCount = 0
     private var lastPublishedFrames = Date.distantPast
-
-    /// Frames carry a 90 kHz RTP timestamp; the layer wants seconds.
-    private static let clockRate: Int32 = 90_000
 
     /// Binds the display layer, configuring it immediately if the stream is
     /// already running.
@@ -82,7 +76,6 @@ final class RTSPStream: ObservableObject {
         framesDecoded = 0
         frameCount = 0
         lastPublishedFrames = .distantPast
-        depacketizer = H264Depacketizer()
         activeParameterSets = nil
         task = Task { await run(url: url) }
     }
@@ -145,9 +138,16 @@ final class RTSPStream: ObservableObject {
 
         // 3. Configure the decoder from sprop-parameter-sets before any frame
         //    arrives, so the first IDR can be displayed rather than dropped.
+        // Reset here rather than in start(), so it is ordered before any read
+        // rather than racing one from a detached task.
+        await decoder.reset()
         if let sets = H264Depacketizer.parameterSets(fromSDP: sdp) {
             log("SDP parameter sets: SPS \(sets.sps.count)B, PPS \(sets.pps.count)B")
             configure(sps: sets.sps, pps: sets.pps)
+            // Seed the decoder too, or the first in-band repeat of these same
+            // sets reads as a change and needlessly rebuilds the format
+            // description on the first IDR.
+            await decoder.seed(sps: sets.sps, pps: sets.pps)
         } else {
             log("⚠︎ no sprop-parameter-sets in SDP — waiting for in-band SPS/PPS")
         }
@@ -214,7 +214,7 @@ final class RTSPStream: ObservableObject {
         log("← \(Self.status(of: play))")
         state = .playing
         startKeepAlive(track: track, session: id)
-        await readRTP(from: inbound)
+        await readRTP(from: inbound, decoder: decoder)
     }
 
     /// Runs `work`, returning nil if it does not finish within `timeout`.
@@ -281,55 +281,49 @@ final class RTSPStream: ObservableObject {
         }
     }
 
-    private func readRTP(from flow: RTPFlow) async {
+    /// Reads RTP and feeds the decoder, **off the main actor**.
+    ///
+    /// `nonisolated` on purpose: the read loop and depacketisation are pure byte
+    /// work, and leaving them on the main actor put a copy, an AVCC rebuild and
+    /// an allocation on the UI thread for every datagram. Only completed frames
+    /// hop back — one per frame instead of one per packet.
+    private nonisolated func readRTP(from flow: RTPFlow, decoder: RTPDecoder) async {
         // Only the first packet gets a deadline — once video is flowing, a gap
-        // is a dropped datagram, not a dead stream. Reading it outside the loop
-        // keeps that distinction out of the per-packet path.
+        // is a dropped datagram, not a dead stream.
         guard let first = await Self.withTimeout(.seconds(10), { await flow.next() }) else {
-            log("✗ no RTP arrived within 10s — the camera never sent to our port")
-            state = .failed("The camera accepted the stream but sent no video.")
+            await noRTPArrived()
             return
         }
-        log("✓ first RTP packet (\(first.count) bytes) from \(flow.endpointDescription)")
+        await log("✓ first RTP packet (\(first.count) bytes) from \(flow.endpointDescription)")
 
-        var firstFrameLogged = false
+        var count = 0
         var datagram: Data? = first
 
         // The loop ends when the flow closes (next() returns nil) or on cancel.
         while let packet = datagram, !Task.isCancelled {
-            process(packet, firstFrameLogged: &firstFrameLogged)
+            if let frame = await decoder.decode(packet) {
+                count += 1
+                await display(frame, isFirst: count == 1)
+            }
             datagram = await flow.next()
         }
-        framesDecoded = frameCount
-        log("RTP reader stopped after \(frameCount) frames")
+        await finishReading(frameCount: count)
     }
 
-    /// Depacketises one datagram and enqueues whatever access unit it completes.
-    private func process(_ packet: Data, firstFrameLogged: inout Bool) {
-        guard !packet.isEmpty else { return }
-
-        let units = depacketizer.handle(rtpPacket: packet)
-        guard !units.isEmpty else { return }
-
-        // Parameter sets also arrive in-band and they change: the camera
-        // reconfigures its encoder when recording starts, so the SDP's sets go
-        // stale mid-session. They repeat before every IDR, so only reconfigure
-        // when they actually differ.
-        if depacketizer.noteParameterSets(from: units), let sets = depacketizer.parameterSets {
+    /// Applies one decoded frame. Main-actor because `AVSampleBufferDisplayLayer`
+    /// and the published counter both require it.
+    private func display(_ frame: RTPDecoder.Frame, isFirst: Bool) {
+        if let sets = frame.parameterSets {
             log("in-band parameter sets changed — reconfiguring decoder")
             configure(sps: sets.sps, pps: sets.pps)
         }
-
-        let timestamp = Self.timestamp(of: packet)
-        let time = CMTime(value: CMTimeValue(timestamp), timescale: Self.clockRate)
-        view?.enqueue(H264Depacketizer.avcc(units), presentationTime: time)
+        view?.enqueue(frame.avcc, presentationTime: frame.presentationTime)
 
         // Counted plainly and published at most once a second: `framesDecoded`
         // is @Published, so incrementing it per frame invalidates every view
         // observing the stream ~30 times a second for a debug counter.
         frameCount += 1
-        if !firstFrameLogged {
-            firstFrameLogged = true
+        if isFirst {
             log("✓ first frame decoded")
             framesDecoded = frameCount
             lastPublishedFrames = Date()
@@ -337,6 +331,16 @@ final class RTSPStream: ObservableObject {
             framesDecoded = frameCount
             lastPublishedFrames = Date()
         }
+    }
+
+    private func noRTPArrived() {
+        log("✗ no RTP arrived within 10s — the camera never sent to our port")
+        state = .failed("The camera accepted the stream but sent no video.")
+    }
+
+    private func finishReading(frameCount count: Int) {
+        framesDecoded = frameCount
+        log("RTP reader stopped after \(count) frames")
     }
 
     /// Receives RTP datagrams from a UDP listener.
@@ -440,12 +444,6 @@ final class RTSPStream: ObservableObject {
             pending?.resume(returning: nil)
             connection?.cancel()
         }
-    }
-
-    private static func timestamp(of packet: Data) -> UInt32 {
-        guard packet.count >= 8 else { return 0 }
-        let base = packet.index(packet.startIndex, offsetBy: 4)
-        return packet[base...].prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
     }
 
     // MARK: - RTSP plumbing
