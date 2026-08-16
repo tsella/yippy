@@ -122,6 +122,21 @@ Three further things this gets wrong easily, all observed on hardware:
 Only the *first* packet has a deadline (10s). After that a gap is a dropped
 datagram, not a dead stream, and must not tear the session down.
 
+**Confirmed working on hardware**: 571 frames decoded across a recording cycle,
+reconnecting cleanly afterwards. A healthy run looks like:
+
+```
+[rtsp-stream] transport: RTP/AVP;unicast;…;server_port=6970-6971
+[rtsp-stream] ✓ first RTP packet (51 bytes) from 192.168.42.1:6970
+[rtsp-stream] ✓ first frame decoded
+```
+
+**Expect `NECP_CLIENT_ACTION_ADD_FLOW … [17: File exists]` spam around the
+first packet.** `NWListener` synthesises a connection per inbound source and
+they all want the same local endpoint, so every attempt after the first fails
+with `EEXIST`. It is noise, not a fault — frames arrive immediately after. Do
+not "fix" it by tearing the listener down and rebuilding it.
+
 **live555 needs iOS Local Network permission to be *granted*.** It enumerates
 local interfaces to pick an RTP source address; without the permission it gets
 nothing and reports `invalid IP address: 0.0.0.0` — while the TCP control socket
@@ -194,6 +209,12 @@ it — which this one always does, at `video_record_complete`.
 This is the general rule on this camera: a refusal is information, not an
 invitation to retry. Retrying into a busy or wrong-mode camera is how the
 control channel dies.
+
+Confirmed working: the stream stops at `start_video_record`, the client does
+not chase it (`Not reviving viewfinder — the camera is recording and will
+restore it itself`), and `vf_start` at `video_record_complete` remounts the
+player, which reconnects and decodes again. The heartbeat stays healthy
+throughout — the symptom that proved the retries were the thing killing it.
 
 Anything that issues `260` — `stopViewfinder()`, `restartViewfinder()` — must
 cancel a pending revival first, since that `260` draws its own `vf_stop` and the

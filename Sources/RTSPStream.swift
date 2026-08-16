@@ -224,6 +224,10 @@ final class RTSPStream: ObservableObject {
         parameters.requiredInterfaceType = .wifi
         parameters.allowLocalEndpointReuse = true
         let listener = try NWListener(using: parameters, on: .init(rawValue: port)!)
+        // The framework synthesises a "connection" per inbound source and each
+        // rejected one logs a NECP_CLIENT_ACTION_ADD_FLOW failure with errno 17
+        // (EEXIST) — they all want this same local endpoint. It is noisy but
+        // harmless: the first flow carries the stream and the rest are dropped.
         listener.newConnectionHandler = { connection in
             flow.accept(connection)
         }
