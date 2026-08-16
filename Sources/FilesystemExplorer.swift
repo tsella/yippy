@@ -199,8 +199,15 @@ final class FilesystemExplorer: ObservableObject {
         return (0, true)
     }
 
+    /// Joins with exactly one separator.
+    ///
+    /// A directory that already ends in `/` — which the camera's own listings
+    /// report — would otherwise produce `/tmp//fuse_z`. The camera tolerates
+    /// that when listing a directory but rejects it when probing a file.
     private func join(_ directory: String, _ name: String) -> String {
-        directory == "/" ? "/\(name)" : "\(directory)/\(name)"
+        let base = directory.hasSuffix("/") ? String(directory.dropLast()) : directory
+        let leaf = name.hasPrefix("/") ? String(name.dropFirst()) : name
+        return "\(base)/\(leaf)"
     }
 
     /// Collapses trailing slashes so `/tmp` and `/tmp/` cannot both be visited.
