@@ -70,6 +70,14 @@ That message is a *symptom of the missing 259*, not a VLC or network bug — the
 player is dialing a server that was never started. `260` stops the stream again
 and re-enables the physical shutter button on some firmwares.
 
+**live555 needs iOS Local Network permission to be *granted*.** It enumerates
+local interfaces to pick an RTP source address; without the permission it gets
+nothing and reports `invalid IP address: 0.0.0.0` — while the TCP control socket
+to the same host works fine, which makes it look like a VLC bug. An
+`NWConnection` to a literal IP does not reliably raise the prompt, so
+`NSBonjourServices` is declared and a short `NWBrowser` runs on connect purely
+to trigger it.
+
 **A bad VLC option aborts the player before it exists.** `VLCMediaPlayer(options:)`
 validates the whole list at library init: one unknown option or one boolean
 given `=value` and `libvlc_media_player_new` fails, taking the viewfinder with
@@ -94,10 +102,16 @@ server: every subsequent request times out, and the camera eventually drops its
 Wi-Fi entirely (`EADDRNOTAVAIL 49` / "No network route"). Only a power cycle
 recovers it.
 
-`isCapturing` gates the shutter, the record button and the heartbeat between
-`start_photo_capture` and `photo_taken`/`precise_capture_data_ready`. Some
-firmwares never send a completion notification, so a watchdog clears the flag
-after 8s rather than locking the UI out for the session.
+`isCapturing` gates the camera from `start_photo_capture` until `photo_taken`.
+**Enforced in `sendRaw`**, so *every* request waits — gating only the shutter
+and the heartbeat was not enough: the gallery's refresh-on-capture fired
+`LIST_DIRECTORY` and wedged the camera anyway. A watchdog releases the gate
+after 8s so a firmware that never reports completion cannot stall the app.
+
+**`precise_capture_data_ready` is not a completion signal.** The data exists but
+the camera is still writing it; treating it as "done" let the next command
+through and wedged the TCP server. Only `photo_taken` (or the watchdog)
+releases the gate.
 
 `msg_id` **7 is a camera-initiated notification**, never a request. It has no
 matching outstanding request, so it must not be routed through the

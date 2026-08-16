@@ -88,6 +88,8 @@ class YiCameraClient: ObservableObject {
     /// Fails the capture open if the camera never reports completion, so a
     /// missed notification cannot lock the UI out permanently.
     private var captureWatchdog: Task<Void, Never>?
+    /// Requests parked until the capture completes.
+    private var captureWaiters: [CheckedContinuation<Void, Never>] = []
     /// Advertised by the START_SESSION response; falls back to the documented
     /// default if the firmware does not report one.
     @Published private(set) var streamURL = URL(string: "rtsp://192.168.42.1/live")!
@@ -200,6 +202,9 @@ class YiCameraClient: ObservableObject {
         isScanning = false
         isViewfinderActive = false
         viewfinderRequested = false
+        // Release the capture gate, or requests parked behind it would hang
+        // forever after a disconnect instead of failing with notConnected.
+        endCapture()
         token = 0
         dataBuffer.removeAll()
 
@@ -349,8 +354,11 @@ class YiCameraClient: ObservableObject {
             // The camera is busy writing until it reports completion.
             beginCapture()
         case .preciseCaptureDataReady:
-            // Some firmwares end the sequence here and never send photo_taken.
-            endCapture()
+            // NOT a completion signal — the data exists but the camera is
+            // still writing it. Observed on hardware: treating this as "done"
+            // let the next command through and wedged the TCP server. Hold the
+            // gate and let photo_taken, or the watchdog, release it.
+            break
         case .photoTaken:
             // `param` carries the path of the saved file on most firmwares.
             if let path = param as? String { lastCapturedPath = path }
@@ -422,6 +430,13 @@ class YiCameraClient: ObservableObject {
     /// SD card, probing unknown ids).
     func sendRaw(msgId: Int, param: String? = nil, type: String? = nil,
                  timeout: Duration = YiCameraClient.requestTimeout) async throws -> [String: Any] {
+        // Wait out an in-flight capture rather than relying on every caller to
+        // check `isCapturing`. The camera is single-threaded while writing a
+        // photo, and one command sent in that window wedges its TCP server for
+        // the rest of the session — so this has to hold for the gallery
+        // refresh and the heartbeat too, not just the shutter.
+        await awaitCaptureCompletion()
+
         guard isConnected, let connection else { throw YiCameraError.notConnected }
 
         var message: [String: Any] = ["msg_id": msgId]
@@ -486,6 +501,9 @@ class YiCameraClient: ObservableObject {
             }
             try await refreshBatteryLevel()
             await identifyCamera()
+            // Must be granted before the viewfinder starts, or live555 cannot
+            // resolve a source address for the RTP stream.
+            requestLocalNetworkPermission()
 
             // The camera has no battery-backed RTC, so its clock drifts or
             // resets entirely. Sync it before anything is captured this
@@ -559,6 +577,27 @@ class YiCameraClient: ObservableObject {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
         let cleaned = raw.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" }
         return String(cleaned).prefix(64).description
+    }
+
+    /// Provokes iOS's Local Network permission prompt.
+    ///
+    /// A plain `NWConnection` to a literal IP does not reliably trigger it, but
+    /// VLC's live555 needs the permission *granted* to enumerate local
+    /// interfaces and choose an RTP source address — without it the stream
+    /// fails with "invalid IP address: 0.0.0.0" while the control socket to the
+    /// same host works. Browsing for a Bonjour service is the documented way to
+    /// raise the prompt; the browser is discarded immediately, since only the
+    /// permission matters, not the result.
+    private func requestLocalNetworkPermission() {
+        let browser = NWBrowser(
+            for: .bonjour(type: "_rtsp._tcp", domain: nil),
+            using: .init()
+        )
+        browser.start(queue: .global(qos: .utility))
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            browser.cancel()
+        }
     }
 
     /// Starts the camera's RTSP server (AMBA_BOSS_RESETVF).
@@ -765,7 +804,9 @@ class YiCameraClient: ObservableObject {
             // shutter would stay disabled for the rest of the session.
             try? await Task.sleep(for: .seconds(8))
             guard !Task.isCancelled else { return }
-            self?.isCapturing = false
+            // Release the gate and anything parked behind it, so a firmware
+            // that never reports completion cannot stall the app.
+            self?.endCapture()
         }
     }
 
@@ -773,6 +814,16 @@ class YiCameraClient: ObservableObject {
         captureWatchdog?.cancel()
         captureWatchdog = nil
         isCapturing = false
+        // Release anything that queued behind the capture.
+        let waiting = captureWaiters
+        captureWaiters.removeAll()
+        for waiter in waiting { waiter.resume() }
+    }
+
+    /// Suspends until any in-flight capture finishes.
+    private func awaitCaptureCompletion() async {
+        guard isCapturing else { return }
+        await withCheckedContinuation { captureWaiters.append($0) }
     }
 
     // MARK: - Camera actions
