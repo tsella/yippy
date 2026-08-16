@@ -24,6 +24,16 @@ final class RTSPStream: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var framesDecoded = 0
 
+    /// The video's real aspect ratio, from the SPS. 16:9 until the first frame
+    /// is configured — this camera changes encoder settings between modes, so
+    /// the frame follows the stream rather than assuming.
+    @Published private(set) var aspectRatio: CGFloat = 16.0 / 9.0
+
+    func noteAspectRatio(_ ratio: CGFloat) {
+        guard ratio > 0, abs(ratio - aspectRatio) > 0.001 else { return }
+        aspectRatio = ratio
+    }
+
     /// Every handshake step is logged. A failure before the first frame is
     /// otherwise invisible — the only previous output was on success, which
     /// made a silent failure indistinguishable from never having started.

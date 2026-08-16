@@ -51,7 +51,22 @@ final class H264StreamLayerView: UIView {
             return
         }
         formatDescription = description
+
+        // The SPS carries the real frame size. Report it so the view can size
+        // itself to the video rather than assuming an aspect ratio — this
+        // camera changes encoder configuration between modes.
+        if let description {
+            let size = CMVideoFormatDescriptionGetDimensions(description)
+            if size.width > 0, size.height > 0 {
+                let ratio = CGFloat(size.width) / CGFloat(size.height)
+                print("[h264] video is \(size.width)×\(size.height)")
+                onAspectRatio?(ratio)
+            }
+        }
     }
+
+    /// Called when the stream's aspect ratio becomes known or changes.
+    var onAspectRatio: ((CGFloat) -> Void)?
 
     /// Enqueues one access unit, already in AVCC form.
     func enqueue(_ avcc: Data, presentationTime: CMTime) {
@@ -151,6 +166,9 @@ struct H264StreamView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> H264StreamLayerView {
         let view = H264StreamLayerView()
+        view.onAspectRatio = { [weak stream] ratio in
+            Task { @MainActor in stream?.noteAspectRatio(ratio) }
+        }
         stream.attach(view)
         return view
     }

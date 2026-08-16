@@ -167,9 +167,13 @@ struct DashboardView: View {
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .aspectRatio(16 / 9, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 16)
+        // Full-bleed: no horizontal inset, and square corners, since rounded
+        // ones read as a mistake when the edges meet the screen. The ratio
+        // comes from the stream's SPS, so the frame matches the video instead
+        // of letterboxing it inside an assumed 16:9.
+        .aspectRatio(stream.aspectRatio, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipped()
     }
 
     private var recordingBadge: some View {
