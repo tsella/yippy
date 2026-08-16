@@ -28,6 +28,7 @@
 		87C7B784C91A8AF62F28A03E /* DirectoryBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671753AA31C7C94F62615B93 /* DirectoryBrowserView.swift */; };
 		88E443CAC288BDA7F0AC6E58 /* ConfirmationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14421FCF5C9AD1BE6B2EA6B2 /* ConfirmationOverlay.swift */; };
 		89E34CAA8E40839A46CE92AD /* ThumbnailLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B0D6706E9F21C6DBED83E1 /* ThumbnailLoader.swift */; };
+		A27B06A568B9B6D51E576370 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA131E59651D97B851E46269 /* AppVersion.swift */; };
 		AAD62EAD484F7F70B9813C2B /* Pods_YiCamera.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26A2D7AE8BE04A318C23C989 /* Pods_YiCamera.framework */; };
 		B29B64E26FBE69D9CCF00AD4 /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EA1D69D3E81FF6F35F81BF0 /* RemoteImageView.swift */; };
 		C6B363D1324C9B1748CEAD2B /* YiFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D9963AC4352A77659468007 /* YiFileManager.swift */; };
@@ -86,6 +87,7 @@
 		A412C540BA2156818B49EE9F /* CameraSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraSettingsView.swift; path = CameraSettingsView.swift; sourceTree = "<group>"; };
 		A44219CE763C068CF7BFD0C4 /* RemoteFileView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteFileView.swift; path = RemoteFileView.swift; sourceTree = "<group>"; };
 		AAB77ACF6B8F4024BB321562 /* Pods-YiCamera.debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Pods-YiCamera.debug.xcconfig"; sourceTree = "<group>"; };
+		BA131E59651D97B851E46269 /* AppVersion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		F4DBF1FA894CB94630DE4EDD /* Pods-YiCamera.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YiCamera.release.xcconfig"; path = "Target Support Files/Pods-YiCamera/Pods-YiCamera.release.xcconfig"; sourceTree = "<group>"; };
 		FBACEADC17BB02EAED492583 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -196,6 +198,7 @@
 				3D8F2F2BEF33D2A6C64274A6 /* H264StreamView.swift */,
 				386A8A55E950CE50CE06867D /* RTSPStream.swift */,
 				2FC6BA1878559E45BC88325D /* RTPDecoder.swift */,
+				BA131E59651D97B851E46269 /* AppVersion.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -332,6 +335,7 @@
 				4E778DDF84B4EE0403CF62AD /* H264StreamView.swift in Sources */,
 				3BF2465909C09AC56EF3B7B9 /* RTSPStream.swift in Sources */,
 				68DAC72D844C6CD4363492AD /* RTPDecoder.swift in Sources */,
+				A27B06A568B9B6D51E576370 /* AppVersion.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

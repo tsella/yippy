@@ -121,6 +121,11 @@ struct SettingsView: View {
                     client.disconnect()
                 }
             }
+
+            Section("About") {
+                LabeledContent("Yippy!", value: AppVersion.full)
+                    .accessibilityLabel("Yippy version \(AppVersion.short), build \(AppVersion.build)")
+            }
         }
         .navigationTitle("Settings")
         .task { await loadDeviceInfo() }

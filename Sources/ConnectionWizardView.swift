@@ -92,7 +92,14 @@ struct ConnectionWizardView: View {
             Text("Action Camera Controller")
                 .font(.title3)
                 .foregroundColor(.secondary)
-                .padding(.bottom, 40)
+                .padding(.bottom, 4)
+
+            Text(AppVersion.display)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+                .accessibilityLabel("Version \(AppVersion.short)")
+                .padding(.bottom, 36)
             
             // Instructions Card
             VStack(alignment: .leading, spacing: 16) {
