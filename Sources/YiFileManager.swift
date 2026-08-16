@@ -110,6 +110,8 @@ class YiFileManager: ObservableObject {
     @Published var savedMessage: String?
     @Published private(set) var isDeleting = false
     @Published private(set) var deleteProgress: Double = 0
+    /// Position within a multi-file download, e.g. (2, 5) for "2 of 5".
+    @Published private(set) var batchProgress: (current: Int, total: Int)?
     /// Paths of preview sidecars the camera actually reported, so a delete is
     /// only issued for one that exists.
     private var sidecarPaths: Set<String> = []
@@ -165,6 +167,16 @@ class YiFileManager: ObservableObject {
             files = all
                 .filter { !$0.isThumbnail }
                 .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+
+            // The listing is now known to be complete, so anything cached for
+            // this camera that is not in it refers to media that has since been
+            // deleted — on the camera, or from another device.
+            let listed = files
+            let cameraID = client.cameraID
+            Task.detached(priority: .utility) {
+                await ThumbnailCache.shared.evictEntriesNotIn(listed, cameraID: cameraID)
+                await ThumbnailCache.shared.enforceSizeLimit()
+            }
         } catch {
             errorMessage = (error as? YiCameraError)?.errorDescription ?? error.localizedDescription
         }
@@ -272,8 +284,13 @@ class YiFileManager: ObservableObject {
 
                 files.removeAll { $0.id == file.id }
                 // The camera reuses filenames, so a stale cached preview would
-                // otherwise show up against a different file later.
+                // otherwise show up against a different file later. Drop it
+                // from disk as well as memory.
                 ThumbnailLoader.shared.invalidate(file)
+                let cameraID = client.cameraID
+                Task.detached(priority: .utility) {
+                    await ThumbnailCache.shared.remove(file, cameraID: cameraID)
+                }
             } catch {
                 failures.append(file.name)
             }
@@ -289,42 +306,72 @@ class YiFileManager: ObservableObject {
     // MARK: - Download
 
     func downloadFile(_ file: YiFile) {
-        guard downloadingFile == nil, let url = file.downloadURL else { return }
+        downloadFiles([file])
+    }
 
-        downloadingFile = file
-        downloadProgress = 0
+    /// Downloads files and saves each to the photo library.
+    ///
+    /// Sequential: the camera serves media from the same box running the
+    /// control channel, and parallel transfers over its Wi-Fi are slower in
+    /// aggregate as well as riskier. A failure on one file is recorded and the
+    /// rest continue, so one bad file does not abandon a long batch.
+    func downloadFiles(_ targets: [YiFile]) {
+        guard downloadingFile == nil, !targets.isEmpty else { return }
 
         downloadTask = Task { [weak self] in
+            guard let self else { return }
             defer {
-                self?.downloadingFile = nil
-                self?.downloadProgress = 0
+                self.downloadingFile = nil
+                self.downloadProgress = 0
+                self.batchProgress = nil
             }
-            do {
-                // Ask before spending time on a download we cannot save.
-                guard await PhotoLibrarySaver.requestAccess() else {
-                    self?.errorMessage = PhotoLibrarySaver.SaveError.permissionDenied.errorDescription
-                    return
-                }
 
-                let downloaded = try await Self.download(from: url, named: file.name) { [weak self] progress in
-                    Task { @MainActor in self?.downloadProgress = progress }
-                }
+            // Ask once, before spending time on downloads we cannot save.
+            guard await PhotoLibrarySaver.requestAccess() else {
+                self.errorMessage = PhotoLibrarySaver.SaveError.permissionDenied.errorDescription
+                return
+            }
 
-                // Save completes before the staged file is removed — Photos
-                // copies from this URL, so deleting it early loses the asset.
+            var failures: [String] = []
+            var saved = 0
+
+            for (index, file) in targets.enumerated() {
+                if Task.isCancelled { break }
+                guard let url = file.downloadURL else { continue }
+
+                self.downloadingFile = file
+                self.downloadProgress = 0
+                self.batchProgress = targets.count > 1 ? (index + 1, targets.count) : nil
+
                 do {
-                    try await PhotoLibrarySaver.save(fileURL: downloaded, isVideo: file.isVideo)
-                    try? FileManager.default.removeItem(at: downloaded)
+                    let downloaded = try await Self.download(from: url, named: file.name) { [weak self] progress in
+                        Task { @MainActor in self?.downloadProgress = progress }
+                    }
+                    // Save completes before the staged file is removed — Photos
+                    // copies from this URL, so deleting it early loses the asset.
+                    do {
+                        try await PhotoLibrarySaver.save(fileURL: downloaded, isVideo: file.isVideo)
+                        try? FileManager.default.removeItem(at: downloaded)
+                        saved += 1
+                    } catch {
+                        try? FileManager.default.removeItem(at: downloaded)
+                        throw error
+                    }
+                } catch is CancellationError {
+                    return
                 } catch {
-                    try? FileManager.default.removeItem(at: downloaded)
-                    throw error
+                    failures.append(file.name)
                 }
-                self?.savedMessage = "\(file.name) saved to Photos"
-            } catch is CancellationError {
-                // User cancelled; nothing to report.
-            } catch {
-                self?.errorMessage = (error as? LocalizedError)?.errorDescription
-                    ?? "Download failed: \(error.localizedDescription)"
+            }
+
+            if !failures.isEmpty {
+                self.errorMessage = failures.count == 1
+                    ? "Could not save \(failures[0])."
+                    : "Could not save \(failures.count) of \(targets.count) files."
+            } else if saved == 1 {
+                self.savedMessage = "\(targets[0].name) saved to Photos"
+            } else if saved > 1 {
+                self.savedMessage = "\(saved) files saved to Photos"
             }
         }
     }

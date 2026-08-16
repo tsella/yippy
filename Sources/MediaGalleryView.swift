@@ -43,6 +43,8 @@ struct MediaGalleryView: View {
             if isSelecting { selectionBar }
         }
         .task {
+            // Partition the thumbnail cache by camera before anything reads it.
+            ThumbnailLoader.shared.setCameraID(client.cameraID)
             // Only load on first appearance; pull-to-refresh handles the rest.
             if fileManager.files.isEmpty { await fileManager.listFiles() }
         }
@@ -153,6 +155,16 @@ struct MediaGalleryView: View {
 
             Spacer()
 
+            Button {
+                let targets = selectedFiles
+                withAnimation { selection = nil }
+                fileManager.downloadFiles(targets)
+            } label: {
+                Label("Download", systemImage: "square.and.arrow.down")
+                    .fontWeight(.semibold)
+            }
+            .disabled(selectedFiles.isEmpty)
+
             Button(role: .destructive) {
                 confirmingBatchDelete = true
             } label: {
@@ -160,6 +172,7 @@ struct MediaGalleryView: View {
                     .fontWeight(.semibold)
             }
             .disabled(selectedFiles.isEmpty)
+            .padding(.leading, 16)
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
@@ -227,9 +240,15 @@ struct MediaGalleryView: View {
                     ProgressView(value: fileManager.downloadProgress)
                         .progressViewStyle(.linear)
                         .frame(width: 200)
-                    Text("Downloading \(file.name)")
-                        .font(.subheadline.weight(.medium))
+                    if let batch = fileManager.batchProgress {
+                        Text("Downloading \(batch.current) of \(batch.total)")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    Text(file.name)
+                        .font(fileManager.batchProgress == nil ? .subheadline.weight(.medium) : .caption)
+                        .foregroundStyle(fileManager.batchProgress == nil ? .primary : .secondary)
                         .lineLimit(1)
+                        .truncationMode(.middle)
                     Text("\(Int(fileManager.downloadProgress * 100))%")
                         .font(.caption)
                         .foregroundStyle(.secondary)
