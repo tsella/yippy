@@ -318,6 +318,62 @@ class YiFileManager: ObservableObject {
     /// control channel, and parallel transfers over its Wi-Fi are slower in
     /// aggregate as well as riskier. A failure on one file is recorded and the
     /// rest continue, so one bad file does not abandon a long batch.
+    /// Saves a camera file into the app's Documents folder, which is visible in
+    /// the Files app under "On My iPhone → Yippy!".
+    ///
+    /// Separate from `downloadFiles`, which targets the photo library: that is
+    /// right for gallery media, but the filesystem browser reaches firmware
+    /// data (`.bin`, `.pcm`, `.conf`) that Photos would simply reject.
+    func downloadToFiles(_ file: YiFile) {
+        guard downloadingFile == nil else { return }
+
+        downloadTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.downloadingFile = nil
+                self.downloadProgress = 0
+            }
+
+            guard let url = file.downloadURL else { return }
+            self.downloadingFile = file
+            self.downloadProgress = 0
+
+            do {
+                let staged = try await Self.download(from: url, named: file.name) { [weak self] progress in
+                    Task { @MainActor in self?.downloadProgress = progress }
+                }
+                let destination = try Self.moveIntoDocuments(staged, named: file.name)
+                self.savedMessage = "\(destination.lastPathComponent) saved to Files"
+            } catch is CancellationError {
+                // User cancelled; nothing to report.
+            } catch {
+                self.errorMessage = (error as? LocalizedError)?.errorDescription
+                    ?? "Download failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Moves a staged download into Documents, avoiding collisions by
+    /// suffixing rather than overwriting — the camera reuses filenames across
+    /// cards, and silently replacing a file the user already pulled is worse
+    /// than keeping both.
+    private static func moveIntoDocuments(_ staged: URL, named name: String) throws -> URL {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let stem = (name as NSString).deletingPathExtension
+        let ext = (name as NSString).pathExtension
+
+        var destination = documents.appendingPathComponent(name)
+        var counter = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            let candidate = ext.isEmpty ? "\(stem)-\(counter)" : "\(stem)-\(counter).\(ext)"
+            destination = documents.appendingPathComponent(candidate)
+            counter += 1
+        }
+
+        try FileManager.default.moveItem(at: staged, to: destination)
+        return destination
+    }
+
     func downloadFiles(_ targets: [YiFile]) {
         guard downloadingFile == nil, !targets.isEmpty else { return }
 

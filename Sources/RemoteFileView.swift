@@ -31,14 +31,10 @@ struct RemoteFileView: View {
                 Button {
                     onDownload()
                 } label: {
-                    Label("Save to Photos", systemImage: "square.and.arrow.down")
+                    Label("Save to Files", systemImage: "arrow.down.doc")
                 }
             } footer: {
-                // Anything outside DCIM is firmware data, and Photos will
-                // reject it — say so rather than letting the save fail opaquely.
-                Text(entry.isMedia
-                     ? "Saves this file to your photo library."
-                     : "Photos only accepts images and videos, so this will likely fail for firmware files.")
+                Text("Saves to the Files app, under On My iPhone → Yippy!.")
             }
         }
         .navigationTitle(entry.name)

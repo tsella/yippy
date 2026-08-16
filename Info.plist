@@ -24,6 +24,14 @@
 	     internet and no certificate authority, so TLS is not possible. ATS
 	     blocks cleartext by default; this scopes the exception to the camera's
 	     fixed address rather than disabling ATS globally. -->
+	<!-- Exposes the app's Documents folder in the Files app, under
+	     "On My iPhone → Yippy!". Both keys are required: the first makes the
+	     container visible, the second lets other apps open files in place.
+	     Without them anything saved there is unreachable to the user. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>

@@ -150,14 +150,15 @@ struct DirectoryBrowserView: View {
         .tint(.blue)
     }
 
-    /// Saves an arbitrary camera file to the photo library.
+    /// Saves an arbitrary camera file to the Files app.
     ///
-    /// Reuses the gallery's download path by describing the entry as a
-    /// `YiFile`, so staging, saving and cleanup behave identically.
+    /// Not the photo library: the browser reaches firmware data (`.bin`,
+    /// `.pcm`, `.conf`) that Photos rejects outright. Documents is visible
+    /// under "On My iPhone → Yippy!".
     private func download(_ entry: FilesystemExplorer.Entry) {
         let file = YiFile(name: entry.name, path: entry.path,
                           size: entry.size, date: nil)
-        fileManager.downloadFile(file)
+        fileManager.downloadToFiles(file)
     }
 
     private func load() async {

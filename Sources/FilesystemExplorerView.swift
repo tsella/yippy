@@ -133,7 +133,9 @@ struct FilesystemExplorerView: View {
                                     RemoteImageView(path: entry.path, name: entry.name)
                                 } else {
                                     RemoteFileView(entry: entry) {
-                                        fileManager.downloadFile(
+                                        // Files, not Photos: the browser
+                                        // reaches firmware data Photos rejects.
+                                        fileManager.downloadToFiles(
                                             YiFile(name: entry.name, path: entry.path,
                                                    size: entry.size, date: nil)
                                         )

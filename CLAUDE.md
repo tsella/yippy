@@ -276,10 +276,14 @@ Media downloaded from the camera goes to the **camera roll** via
 `PhotoLibrarySaver`. It is staged in `temporaryDirectory` and deleted once
 Photos has copied it.
 
-Do **not** save to the app's `documentDirectory`: without `UIFileSharingEnabled`
-that container is invisible to the user and never reclaimed, so downloads
-silently accumulate somewhere they can never be opened. (That was the original
-behaviour.) Authorisation is requested as `.addOnly`, which does not grant read
+The **filesystem browser** saves to `documentDirectory` instead, via
+`downloadToFiles`, because it reaches firmware data (`.bin`, `.pcm`, `.conf`)
+that Photos rejects outright. That is only safe because `UIFileSharingEnabled`
+and `LSSupportsOpeningDocumentsInPlace` are set — without both, the container is
+invisible to the user and never reclaimed, so downloads accumulate somewhere
+they can never be opened. (That was the original behaviour for *all* downloads.)
+Collisions are suffixed rather than overwritten, since the camera reuses
+filenames across cards. Authorisation is requested as `.addOnly`, which does not grant read
 access to the user's existing library, and `NSPhotoLibraryAddUsageDescription`
 must stay in `Info.plist` or the request traps at runtime.
 
