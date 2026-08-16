@@ -35,7 +35,7 @@ struct SettingsView: View {
                 NavigationLink {
                     CameraSettingsView(client: client)
                 } label: {
-                    Label("Capture Settings", systemImage: "camera.badge.gearshape")
+                    Label("Capture Settings", systemImage: "camera")
                 }
             }
 
