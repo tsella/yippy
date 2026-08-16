@@ -75,16 +75,40 @@ decodes with `AVSampleBufferDisplayLayer`, because VLC cannot play this camera:
 
 - The camera answers `461 Unsupported Transport` for
   `RTP/AVP/TCP;interleaved=0-1`, so `--rtsp-tcp` can never work — it is UDP-only.
+  **It also closes the control socket after the 461**, so any request sent on
+  that connection afterwards fails with `error 96 - No message available on
+  STREAM`. A SETUP retry needs a fresh connection, or must skip TCP entirely.
 - On the UDP path live555 derives its local address with a multicast trick that
   returns `0.0.0.0` on iOS, which is the "invalid IP address" message. Fixing
   it upstream means patching `GroupsockHelper.cpp`, which a prebuilt
   MobileVLCKit rules out.
 
+The camera's own UDP SETUP is fine — `RTSPStream` gets `200 OK` and a session
+every time. Earlier logs showing UDP failing were the *probe* reusing the socket
+the 461 had just killed, not a camera limitation.
+
 The stream itself is simple enough that speaking it directly is less work than
-carrying a media framework: one H.264 baseline track (`profile-level-id=42801E`),
-`packetization-mode=1`, no audio, no auth, no encryption. `H264Depacketizer`
-handles the three RFC 6184 payload shapes (single NAL, STAP-A, FU-A) and emits
-AVCC; SPS/PPS come from `sprop-parameter-sets` in the SDP.
+carrying a media framework: one H.264 track (`profile-level-id` varies — see
+below), `packetization-mode=1`, no audio, no auth, no encryption.
+`H264Depacketizer` handles the three RFC 6184 payload shapes (single NAL,
+STAP-A, FU-A) and emits AVCC; SPS/PPS come from `sprop-parameter-sets` in the
+SDP *and* in-band, because they change.
+
+### The RTP socket must listen, not connect
+
+**This is the bug that made a perfect handshake deliver zero frames.** The
+camera sends RTP *from* its own `server_port` — not from the port we send to —
+and a connected UDP `NWConnection` silently drops datagrams from any other
+source. DESCRIBE, SETUP and PLAY all returned `200 OK`, then nothing arrived.
+
+Bind with `NWListener(using: .udp, on: port)` and take the camera's first
+datagram as the flow. Do **not** pass `requiredLocalEndpoint` in the parameters
+— a listener takes its port in the initialiser, and passing both is what
+produced the spurious "error 22" that was once blamed on `NWListener` being
+"the wrong shape" for datagrams. It is the right shape.
+
+The receive path times out after 10s so a camera that accepts PLAY and then
+sends nothing reports a failure instead of hanging in `.playing` forever.
 
 **live555 needs iOS Local Network permission to be *granted*.** It enumerates
 local interfaces to pick an RTP source address; without the permission it gets
@@ -131,16 +155,20 @@ path alone.
 camera switches video mode and its RTSP server goes with it. That cycle is
 normal, not an error.
 
-**The stream does not come back on its own, but it does come back.** The
-official app kept its preview through recording, and the camera re-emits
-`vf_start` unprompted after a *photo* capture — so the server can restart; it
-just is not automatic after a mode change. `reviveViewfinderAfterModeChange()`
-re-issues `259` once the mode has settled and lets the resulting `vf_start`
-remount the player.
+**This firmware restores the viewfinder by itself.** Verified on hardware: a
+`vf_start` arrives unprompted after `video_record_complete`, and again after
+`photo_taken`. The player remounts on that notification and re-runs the whole
+RTSP handshake — a fresh session and new SPS/PPS each time.
 
-**It is bounded to three attempts on purpose.** If a firmware genuinely cannot
-stream while recording, an open-ended retry is the same request flood that has
-wedged this camera before. It gives up and leaves the viewfinder off.
+`reviveViewfinderAfterModeChange()` re-issues `259` if that `vf_start` does not
+arrive, as a fallback for firmwares that need asking. **It is bounded to three
+attempts on purpose**: if a firmware genuinely cannot stream while recording, an
+open-ended retry is the same request flood that has wedged this camera before.
+
+Note what this means for a preview *during* recording: the camera stops the
+stream for the duration and only returns it at `video_record_complete`, so there
+is no live preview while recording on this firmware. The gap is the camera's,
+not the app's.
 
 Anything that issues `260` — `stopViewfinder()`, `restartViewfinder()` — must
 cancel a pending revival first, since that `260` draws its own `vf_stop` and the

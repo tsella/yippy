@@ -10,10 +10,14 @@ import Network
 /// OPTIONS, DESCRIBE, SETUP, PLAY — over the same Wi-Fi-pinned socket the
 /// control channel uses, and reports exactly how far it gets.
 ///
-/// It requests **TCP interleaved** transport (`RTP/AVP/TCP;interleaved=0-1`),
-/// where RTP packets arrive on the RTSP connection itself framed as
-/// `$<channel><2-byte length><payload>`. That needs no UDP bind at all, so if
-/// packets arrive here the camera is fine and the problem is on VLC's side.
+/// It uses **UDP**, mirroring `RTSPStream`. Interleaved TCP is not attempted:
+/// this firmware answers `461` and then closes the control socket, so the UDP
+/// SETUP that used to follow was written to an already-reset connection and
+/// failed with "No message available on STREAM" — a probe bug that looked for
+/// a long time like a camera limitation.
+///
+/// Now that `RTSPStream` exists and logs its own handshake, this is mostly
+/// redundant; it stays for testing the transport without mounting a player.
 @MainActor
 final class RTSPProbe: ObservableObject {
 
@@ -111,31 +115,25 @@ final class RTSPProbe: ObservableObject {
         let track = Self.trackURL(sdp: sdp, describe: describe, base: url)
         note("  track: \(track)")
 
-        // 3a. SETUP over interleaved TCP. This camera answers 461, but try it
-        //     first: when a firmware does support it, no UDP bind is needed.
+        // 3a. Interleaved TCP is not attempted. This camera answers 461 and
+        //     then closes the control socket, so the UDP SETUP that followed
+        //     was written to a connection the camera had already RST — the
+        //     "error 96 - No message available on STREAM" in every probe log.
+        //     The failure was the probe's, not the camera's: the viewfinder's
+        //     UDP SETUP succeeds on a socket that never made the TCP attempt.
         var session: String?
-        var interleaved = false
-        if let setup = await request(
-            "SETUP", target: track,
-            headers: ["Transport: RTP/AVP/TCP;unicast;interleaved=0-1"]
-        ), let id = Self.header("Session", in: setup)?
-            .split(separator: ";").first.map(String.init) {
-            session = id
-            interleaved = Self.header("Transport", in: setup)?.contains("interleaved") ?? false
-        } else {
-            note("⚠︎ Interleaved TCP refused (461). This firmware is UDP-only,")
-            note("  so --rtsp-tcp cannot help — VLC must bind a UDP socket.")
-        }
+        note("⚠︎ Skipping interleaved TCP — this firmware answers 461 and then")
+        note("  closes the control socket, which breaks the UDP SETUP after it.")
 
         // 3b. Fall back to UDP, binding our own receive socket. live555 fails
         //     here because it derives the local address via a multicast trick
         //     that returns 0.0.0.0 on iOS. NWConnection has no such problem, so
         //     this establishes whether the *camera* will stream over UDP.
-        var rtpConnection: NWConnection?
+        var rtpListener: NWListener?
         if session == nil {
             do {
-                let (rtp, port) = try Self.bindRTPPort(host: host)
-                rtpConnection = rtp
+                let (rtp, port) = try Self.bindRTPPort()
+                rtpListener = rtp
                 note("Bound local UDP port \(port) for RTP")
 
                 if let setup = await request(
@@ -163,26 +161,27 @@ final class RTSPProbe: ObservableObject {
         guard await request("PLAY", target: track, headers: ["Session: \(session)"]) != nil else { return }
 
         note("Listening for RTP packets (5s)…")
-        if interleaved {
-            await readInterleaved(connection, seconds: 5)
-        } else if let rtp = rtpConnection {
+        if let rtp = rtpListener {
             await readUDP(rtp, seconds: 5)
         }
 
         if packetsReceived > 0 {
             note("✓ Received \(packetsReceived) RTP packets (\(bytesReceived) bytes).")
-            note("The camera streams fine over \(interleaved ? "TCP" : "UDP") —")
-            note("the failure is inside VLC's live555, not the camera.")
+            note("The camera streams fine over UDP.")
         } else {
             note("✗ No RTP packets arrived after PLAY.")
             note("The camera accepted the handshake but sends nothing.")
         }
 
         _ = await request("TEARDOWN", target: track, headers: ["Session: \(session)"])
-        rtpConnection?.cancel()
+        rtpListener?.newConnectionHandler = nil
+        rtpListener?.cancel()
     }
 
     /// Reads `$<channel><length><payload>` frames until the deadline.
+    /// Reads RTP framed on the RTSP connection itself (`$<channel><len><data>`).
+    /// Unused against this camera, which refuses interleaved TCP — kept for a
+    /// firmware that accepts it, where no UDP bind would be needed at all.
     private func readInterleaved(_ connection: NWConnection, seconds: TimeInterval) async {
         let deadline = Date().addingTimeInterval(seconds)
         var buffer = Data()
@@ -212,30 +211,38 @@ final class RTSPProbe: ObservableObject {
 
     /// Binds a local UDP port for RTP and reports which one.
     ///
-    /// `NWListener` is the wrong shape here — it expects inbound *connections*
-    /// and fails with error 22 for a bare unidirectional datagram flow. A
-    /// `NWConnection` to the camera's RTSP port with a pinned local endpoint
-    /// binds the port and can receive the datagrams the camera sends to it.
-    private static func bindRTPPort(host: String) throws -> (NWConnection, UInt16) {
+    /// This must **listen**, not connect. The camera sends RTP from its own
+    /// `server_port`, which is not the port we send to, and a connected UDP
+    /// socket drops datagrams from any other source — a handshake that
+    /// completes cleanly and then delivers nothing.
+    ///
+    /// (An earlier version blamed `NWListener` for an "error 22" here. That was
+    /// the `requiredLocalEndpoint` in the parameters, not the listener: a
+    /// listener takes its port in `NWListener(using:on:)` instead.)
+    private static func bindRTPPort() throws -> (NWListener, UInt16) {
         // Pick a high even port, as RTP convention expects (RTCP takes port+1).
         let port = UInt16.random(in: 20000...40000) & ~1
 
         let parameters = NWParameters.udp
         parameters.requiredInterfaceType = .wifi
         parameters.allowLocalEndpointReuse = true
-        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.any),
-                                                     port: .init(rawValue: port)!)
 
-        let connection = NWConnection(host: NWEndpoint.Host(host),
-                                      port: .init(rawValue: port)!,
-                                      using: parameters)
-        return (connection, port)
+        let listener = try NWListener(using: parameters, on: .init(rawValue: port)!)
+        listener.start(queue: .global(qos: .userInitiated))
+        return (listener, port)
     }
 
-    /// Counts RTP datagrams arriving on the bound UDP socket.
-    private func readUDP(_ connection: NWConnection, seconds: TimeInterval) async {
-        connection.start(queue: .global(qos: .userInitiated))
+    /// Counts RTP datagrams arriving on the bound UDP port.
+    private func readUDP(_ listener: NWListener, seconds: TimeInterval) async {
         let deadline = Date().addingTimeInterval(seconds)
+
+        // The camera's first datagram establishes the flow.
+        guard let connection = await Self.firstInboundFlow(on: listener,
+                                                           timeout: .seconds(5)) else {
+            note("✗ No RTP arrived — the camera never sent to our port.")
+            return
+        }
+        note("  RTP flow from \(connection.endpoint)")
 
         while Date() < deadline, !Task.isCancelled {
             guard let datagram = try? await Self.receive(connection, max: 65536),
@@ -247,6 +254,39 @@ final class RTSPProbe: ObservableObject {
             bytesReceived += datagram.count
             if packetsReceived == 1 {
                 note("  first RTP datagram: \(datagram.count) bytes")
+            }
+        }
+    }
+
+    /// Guards a one-shot continuation against a second inbound flow.
+    private final class FlowGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var claimed = false
+
+        func claim() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            guard !claimed else { return false }
+            claimed = true
+            return true
+        }
+    }
+
+    private static func firstInboundFlow(on listener: NWListener,
+                                         timeout: Duration) async -> NWConnection? {
+        let gate = FlowGate()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<NWConnection?, Never>) in
+            listener.newConnectionHandler = { connection in
+                guard gate.claim() else {
+                    connection.cancel()
+                    return
+                }
+                connection.start(queue: .global(qos: .userInitiated))
+                continuation.resume(returning: connection)
+            }
+            Task {
+                try? await Task.sleep(for: timeout)
+                guard gate.claim() else { return }
+                continuation.resume(returning: nil)
             }
         }
     }

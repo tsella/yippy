@@ -37,6 +37,7 @@ final class RTSPStream: ObservableObject {
 
     private var control: NWConnection?
     private var rtp: NWConnection?
+    private var rtpListener: NWListener?
     private var session: String?
     private var task: Task<Void, Never>?
     private var keepAlive: Task<Void, Never>?
@@ -80,6 +81,8 @@ final class RTSPStream: ObservableObject {
         session = nil
         control?.cancel(); control = nil
         rtp?.cancel(); rtp = nil
+        rtpListener?.newConnectionHandler = nil
+        rtpListener?.cancel(); rtpListener = nil
         activeParameterSets = nil
         view?.reset()
         state = .idle
@@ -134,18 +137,19 @@ final class RTSPStream: ObservableObject {
 
         // 4. Bind a local RTP port and SETUP. The camera only supports UDP:
         //    it answers 461 for interleaved TCP, so there is no fallback to try.
+        //
+        //    This must *listen*, not connect. The camera sends RTP from its own
+        //    server_port, which is not the port we send to, and a connected UDP
+        //    socket silently drops datagrams from any other source — the cause
+        //    of a handshake that completed cleanly and then delivered 0 frames.
         let rtpPort = UInt16.random(in: 20000...40000) & ~1
-        let parameters = NWParameters.udp
-        parameters.requiredInterfaceType = .wifi
-        parameters.allowLocalEndpointReuse = true
-        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.any),
-                                                     port: .init(rawValue: rtpPort)!)
-        let rtp = NWConnection(host: NWEndpoint.Host(host),
-                               port: .init(rawValue: rtpPort)!,
-                               using: parameters)
-        self.rtp = rtp
-        rtp.start(queue: .global(qos: .userInitiated))
-        log("bound local UDP port \(rtpPort) for RTP")
+        guard let listener = try? Self.listen(on: rtpPort) else {
+            log("✗ could not bind local UDP port \(rtpPort)")
+            state = .failed("Could not open a port to receive video.")
+            return
+        }
+        self.rtpListener = listener
+        log("listening on local UDP port \(rtpPort) for RTP")
 
         log("→ SETUP (client_port=\(rtpPort)-\(rtpPort + 1))")
         guard let setup = await request(
@@ -164,6 +168,11 @@ final class RTSPStream: ObservableObject {
             return
         }
         session = id
+        // Worth logging: RTP arrives *from* this port, not the one we send to.
+        // Assuming otherwise is what made the first implementation deaf.
+        if let transport = Self.header("Transport", in: setup) {
+            log("transport: \(transport)")
+        }
         log("session \(id)")
 
         // 5. PLAY, then read RTP until cancelled.
@@ -177,7 +186,19 @@ final class RTSPStream: ObservableObject {
         log("← \(Self.status(of: play))")
         state = .playing
         startKeepAlive(track: track, session: id)
-        await readRTP(rtp)
+        await readRTP(from: listener)
+    }
+
+    /// Binds a UDP listener that accepts RTP from whatever source port the
+    /// camera chooses, and hands back the first flow it sees.
+    private static func listen(on port: UInt16) throws -> NWListener {
+        let parameters = NWParameters.udp
+        parameters.requiredInterfaceType = .wifi
+        parameters.allowLocalEndpointReuse = true
+        let listener = try NWListener(using: parameters,
+                                      on: .init(rawValue: port)!)
+        listener.start(queue: .global(qos: .userInitiated))
+        return listener
     }
 
     /// Applies parameter sets to the layer, remembering them so an identical
@@ -207,7 +228,17 @@ final class RTSPStream: ObservableObject {
         }
     }
 
-    private func readRTP(_ connection: NWConnection) async {
+    private func readRTP(from listener: NWListener) async {
+        // The camera opens the flow by sending its first datagram; take that
+        // as the RTP connection and read the rest from it.
+        guard let connection = await Self.firstInboundFlow(on: listener) else {
+            log("✗ no RTP arrived — the camera never sent to our port")
+            state = .failed("The camera accepted the stream but sent no video.")
+            return
+        }
+        self.rtp = connection
+        log("✓ RTP flow from \(connection.endpoint)")
+
         var firstPacketLogged = false
         var firstFrameLogged = false
 
@@ -242,6 +273,48 @@ final class RTSPStream: ObservableObject {
             }
         }
         log("RTP reader stopped after \(framesDecoded) frames")
+    }
+
+    /// Guards a one-shot continuation against a second inbound flow. A plain
+    /// captured `var` would be a data race — the handler runs off-actor.
+    private final class FlowGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var claimed = false
+
+        /// True for the first caller only.
+        func claim() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            guard !claimed else { return false }
+            claimed = true
+            return true
+        }
+    }
+
+    /// Waits for the camera's first RTP datagram, which is what establishes the
+    /// inbound flow. Times out so a camera that accepts PLAY and then sends
+    /// nothing reports a failure rather than hanging silently.
+    ///
+    /// One continuation, resumed by whichever of the flow or the timeout gets
+    /// there first — a task group would abandon the loser's continuation, which
+    /// `withCheckedContinuation` requires be resumed exactly once.
+    private static func firstInboundFlow(on listener: NWListener,
+                                         timeout: Duration = .seconds(10)) async -> NWConnection? {
+        let gate = FlowGate()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<NWConnection?, Never>) in
+            listener.newConnectionHandler = { connection in
+                guard gate.claim() else {
+                    connection.cancel()
+                    return
+                }
+                connection.start(queue: .global(qos: .userInitiated))
+                continuation.resume(returning: connection)
+            }
+            Task {
+                try? await Task.sleep(for: timeout)
+                guard gate.claim() else { return }
+                continuation.resume(returning: nil)
+            }
+        }
     }
 
     private static func timestamp(of packet: Data) -> UInt32 {
