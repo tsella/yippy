@@ -134,7 +134,10 @@ class YiFileManager: ObservableObject {
     @Published private(set) var batchProgress: (current: Int, total: Int)?
     /// Paths of preview sidecars the camera actually reported, so a delete is
     /// only issued for one that exists.
-    private var sidecarPaths: Set<String> = []
+    /// Sidecars the listing actually reported, keyed by lowercased path so a
+    /// derived `.THM` matches a listed `.thm`. The value is the path as the
+    /// camera spelled it — that is what `DELETE_FILE` must be given.
+    private var sidecarPaths: [String: String] = [:]
 
     private let client: YiCameraClient
     private var downloadTask: Task<Void, Never>?
@@ -183,7 +186,14 @@ class YiFileManager: ObservableObject {
             // from the media name, but deriving it does not mean the file is
             // there — issuing a delete for one that is not present returns
             // -1/-13 from the camera. The listing is the authority.
-            sidecarPaths = Set(all.filter(\.isThumbnail).map(\.path))
+            // Keyed case-insensitively: the derived path spells the photo
+            // sidecar `.THM`, but firmwares disagree on case, and an exact
+            // match would silently leave the sidecar behind on one that lists
+            // `.thm`. Maps to the path as listed, which is what must be sent.
+            sidecarPaths = Dictionary(
+                all.filter(\.isThumbnail).map { ($0.path.lowercased(), $0.path) },
+                uniquingKeysWith: { first, _ in first }
+            )
 
             // Sidecars are previews, not media — showing them would double the
             // gallery and fill it with tiny duplicate entries.
@@ -305,10 +315,16 @@ class YiFileManager: ObservableObject {
                 // previews for media that no longer exists — but only if the
                 // listing actually reported one. Deleting a derived path that
                 // does not exist just draws -1/-13 from the camera.
-                if let thumbnailPath = file.thumbnailPath,
-                   sidecarPaths.contains(thumbnailPath) {
-                    _ = try? await client.send(.deleteFile, param: thumbnailPath)
-                    sidecarPaths.remove(thumbnailPath)
+                if let derived = file.thumbnailPath {
+                    if let listed = sidecarPaths[derived.lowercased()] {
+                        _ = try? await client.send(.deleteFile, param: listed)
+                        sidecarPaths[derived.lowercased()] = nil
+                    } else {
+                        // Not an error — plenty of media has no sidecar — but
+                        // say so, since a silently skipped sidecar is otherwise
+                        // indistinguishable from one that was deleted.
+                        print("[files] no listed sidecar for \(file.name) (looked for \(derived))")
+                    }
                 }
 
                 files.removeAll { $0.id == file.id }
