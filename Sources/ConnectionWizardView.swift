@@ -21,24 +21,47 @@ struct ConnectionWizardView: View {
 
     /// Explains *why* the button is disabled, so a greyed-out control is never
     /// a dead end.
-    @ViewBuilder
-    private var statusRow: some View {
+    private var statusText: String {
         switch reachability.status {
-        case .reachable:
-            Label("Camera found at 192.168.42.1", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        case .unreachable:
-            Label("Camera not found — check you joined the YDXJ_ network and the camera is awake",
-                  systemImage: "wifi.exclamationmark")
-                .foregroundStyle(.orange)
-        case .noWiFi:
-            Label("Wi-Fi is off — join the camera's YDXJ_ network in Settings",
-                  systemImage: "wifi.slash")
-                .foregroundStyle(.orange)
-        case .checking, .unknown:
-            Label("Looking for the camera…", systemImage: "antenna.radiowaves.left.and.right")
-                .foregroundStyle(.secondary)
+        case .reachable:   "Camera found at 192.168.42.1"
+        case .unreachable: "Camera not found — check the YDXJ_ network and that the camera is awake"
+        case .noWiFi:      "Wi-Fi is off — join the camera's YDXJ_ network in Settings"
+        case .checking, .unknown: "Looking for the camera…"
         }
+    }
+
+    private var statusIcon: String {
+        switch reachability.status {
+        case .reachable:   "checkmark.circle.fill"
+        case .unreachable: "wifi.exclamationmark"
+        case .noWiFi:      "wifi.slash"
+        case .checking, .unknown: "antenna.radiowaves.left.and.right"
+        }
+    }
+
+    private var statusColor: Color {
+        switch reachability.status {
+        case .reachable:          .green
+        case .unreachable, .noWiFi: .orange
+        case .checking, .unknown: .secondary
+        }
+    }
+
+    /// The messages range from one line to two, so the row reserves two lines
+    /// up front. Sizing to content instead would shift the Connect button
+    /// every time the status changed.
+    private var statusRow: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: statusIcon)
+                .frame(width: 16)
+            Text(statusText)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .foregroundStyle(statusColor)
+        .lineLimit(2, reservesSpace: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     var body: some View {
@@ -86,9 +109,6 @@ struct ConnectionWizardView: View {
             // Live reachability, so the button reflects whether the camera can
             // actually be reached rather than inviting a tap that will hang.
             statusRow
-                .font(.caption)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(.easeInOut(duration: 0.2), value: reachability.status)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 12)
