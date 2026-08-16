@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var checkedSpace = false
     @State private var cameraClock: Date?
     @State private var isSyncingClock = false
+    @State private var logo: UIImage?
     @AppStorage(YiCameraClient.syncClockDefaultsKey) private var syncClockOnConnect = true
 
     private static let keyNames: [String: String] = [
@@ -29,6 +30,19 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            if let logo {
+                Section {
+                    Image(uiImage: logo)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: 90)
+                        .padding(.vertical, 8)
+                        .accessibilityLabel("Camera logo")
+                }
+                .listRowBackground(Color.clear)
+            }
+
             deviceSection
 
             Section("Camera") {
@@ -182,6 +196,16 @@ struct SettingsView: View {
                     return (key: name, value: "\(value)")
                 }
                 .sorted { $0.key < $1.key }
+
+            // The firmware reports an artwork path in `logo`; it is hidden from
+            // the key list and shown as a header instead.
+            if let raw = response["logo"] {
+                print("[settings] logo field: \(raw)")
+            }
+            if let url = YiCameraClient.logoURL(from: response) {
+                logo = await ThumbnailLoader.shared.logo(from: url)
+                if logo == nil { print("[settings] logo fetch failed for \(url)") }
+            }
 
             cardSpace = await client.cardSpace()
             checkedSpace = true

@@ -502,6 +502,31 @@ class YiCameraClient: ObservableObject {
         }
     }
 
+    /// Resolves the `logo` field of a GET_DEVICE_INFO response to a fetchable
+    /// URL, if the firmware reports one.
+    ///
+    /// The field is undocumented and its shape varies, so all three plausible
+    /// forms are accepted: an absolute http(s) URL, a camera-side absolute
+    /// path under the SD card mount, or a bare filename served from the
+    /// camera's HTTP root.
+    nonisolated static func logoURL(from info: [String: Any]) -> URL? {
+        guard let raw = info["logo"].map({ "\($0)" })?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty, raw != "0", raw.lowercased() != "null" else { return nil }
+
+        if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
+            return URL(string: raw)
+        }
+        // The HTTP server is rooted at the SD card mount, so strip that prefix
+        // if present, then join with exactly one separator.
+        let relative = raw
+            .replacingOccurrences(of: YiFileManager.mediaRoot, with: "")
+            .drop { $0 == "/" }
+        let escaped = String(relative)
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String(relative)
+        return URL(string: "http://\(host)/\(escaped)")
+    }
+
     /// Derives a stable per-device identifier from GET_DEVICE_INFO.
     ///
     /// Best-effort: a camera that reports nothing usable keeps the default, so

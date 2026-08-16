@@ -82,6 +82,26 @@ actor ThumbnailCache {
         if let known = totalBytes { totalBytes = known + Int64(data.count) }
     }
 
+    /// Stores an image under an arbitrary name rather than a `YiFile`, for
+    /// per-camera artwork such as the device logo.
+    func image(named name: String, cameraID: String) -> UIImage? {
+        let url = directory(for: cameraID).appendingPathComponent(name)
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        return UIImage(data: data)
+    }
+
+    func store(_ image: UIImage, named name: String, cameraID: String) {
+        guard let data = image.pngData() else { return }
+        if !preparedPartitions.contains(cameraID) {
+            try? FileManager.default.createDirectory(at: directory(for: cameraID),
+                                                     withIntermediateDirectories: true)
+            preparedPartitions.insert(cameraID)
+        }
+        let url = directory(for: cameraID).appendingPathComponent(name)
+        guard (try? data.write(to: url, options: .atomic)) != nil else { return }
+        if let known = totalBytes { totalBytes = known + Int64(data.count) }
+    }
+
     /// Drops a single entry — used when its file is deleted from the camera.
     func remove(_ file: YiFile, cameraID: String) {
         let url = location(cameraID: cameraID, file: file)
