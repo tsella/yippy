@@ -1,6 +1,5 @@
 import Foundation
 import Network
-import os
 
 /// Watches whether the camera is reachable, to gate the Connect button.
 ///
@@ -18,7 +17,7 @@ import os
 final class CameraReachability: ObservableObject {
 
     enum Status: Equatable {
-        case unknown
+        /// Probing, or not yet started. No consumer distinguishes those.
         case checking
         /// The control port answered — the camera is there.
         case reachable
@@ -29,10 +28,15 @@ final class CameraReachability: ObservableObject {
         case noWiFi
     }
 
-    @Published private(set) var status: Status = .unknown
+    @Published private(set) var status: Status = .checking
 
     private var monitor: NWPathMonitor?
     private var probeTask: Task<Void, Never>?
+    /// Set by `stop()`. A path update already queued when stop was called can
+    /// still arrive afterwards, and without this it would restart the probe
+    /// loop with no view on screen — reopening a socket to the camera's
+    /// single-connection control port every few seconds.
+    private var isStopped = false
     /// How long to wait for the control port before calling it unreachable.
     private static let probeTimeout: Duration = .seconds(2)
     /// Re-probe while the user is looking at the connect screen, so plugging in
@@ -43,13 +47,14 @@ final class CameraReachability: ObservableObject {
 
     /// Starts watching. Safe to call repeatedly.
     func start() {
+        isStopped = false
         guard monitor == nil else { return }
 
         let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
         self.monitor = monitor
         monitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, !self.isStopped else { return }
                 if path.status == .satisfied {
                     self.beginProbing()
                 } else {
@@ -65,15 +70,16 @@ final class CameraReachability: ObservableObject {
     }
 
     func stop() {
+        isStopped = true
         probeTask?.cancel()
         probeTask = nil
         monitor?.cancel()
         monitor = nil
-        status = .unknown
+        status = .checking
     }
 
     private func beginProbing() {
-        guard probeTask == nil else { return }
+        guard !isStopped, probeTask == nil else { return }
         probeTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -92,38 +98,31 @@ final class CameraReachability: ObservableObject {
     /// camera's network has no internet, so iOS would otherwise route this over
     /// cellular and fail with EADDRNOTAVAIL.
     private nonisolated static func probe() async -> Bool {
-        let parameters = NWParameters.tcp
-        parameters.requiredInterfaceType = .wifi
+        // Same endpoint and Wi-Fi pinning as the real session, from the one
+        // place that owns them.
+        let parameters = YiCameraClient.controlParameters()
         if let tcp = parameters.defaultProtocolStack.internetProtocol as? NWProtocolTCP.Options {
             tcp.connectionTimeout = 2
         }
-
-        let connection = NWConnection(
-            host: NWEndpoint.Host("192.168.42.1"),
-            port: NWEndpoint.Port(rawValue: 7878)!,
-            using: parameters
-        )
+        let endpoint = YiCameraClient.controlEndpoint()
+        let connection = NWConnection(host: endpoint.host, port: endpoint.port, using: parameters)
 
         return await withTaskGroup(of: Bool.self) { group in
             group.addTask {
                 await withCheckedContinuation { continuation in
-                    // `resumed` guards against the handler firing more than
-                    // once, which NWConnection does on some transitions.
-                    let resumed = OSAllocatedUnfairLock(initialState: false)
-                    @Sendable func finish(_ value: Bool) {
-                        let shouldResume = resumed.withLock { done -> Bool in
-                            if done { return false }
-                            done = true
-                            return true
-                        }
-                        if shouldResume { continuation.resume(returning: value) }
-                    }
-
-                    connection.stateUpdateHandler = { state in
+                    connection.stateUpdateHandler = { [weak connection] state in
+                        // Clearing the handler on the first terminal state is
+                        // enough to resume exactly once: it runs on the
+                        // connection's own serial queue, so there is no race.
                         switch state {
-                        case .ready:            finish(true)
-                        case .failed, .cancelled: finish(false)
-                        default:                break
+                        case .ready:
+                            connection?.stateUpdateHandler = nil
+                            continuation.resume(returning: true)
+                        case .failed, .cancelled:
+                            connection?.stateUpdateHandler = nil
+                            continuation.resume(returning: false)
+                        default:
+                            break
                         }
                     }
                     connection.start(queue: .global(qos: .utility))

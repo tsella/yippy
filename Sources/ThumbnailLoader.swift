@@ -111,15 +111,46 @@ final class ThumbnailLoader: ObservableObject {
         return await task.value
     }
 
-    /// Which camera's cache partition to use. Set on connect.
-    private var cameraID = "unknown-camera"
+    /// The client owns camera identity; the loader reads it rather than
+    /// keeping a copy that a view has to remember to refresh. A stale copy
+    /// would write into the wrong cache partition — including from screens
+    /// that never visit the gallery, such as the capture preview.
+    private weak var client: YiCameraClient?
 
-    func setCameraID(_ id: String) {
-        guard id != cameraID else { return }
-        cameraID = id
-        // Memory cache is keyed by path alone, so it must not survive a switch
-        // to a different camera with the same filenames.
+    private var cameraID: String { client?.cameraID ?? "unknown-camera" }
+
+    func attach(to client: YiCameraClient) {
+        guard self.client !== client else { return }
+        self.client = client
+        // The memory cache is keyed by path alone, so it must not survive a
+        // switch to a different camera with the same filenames.
         cache.removeAllObjects()
+    }
+
+    /// Drops in-memory and on-disk previews for a file in one call, so callers
+    /// do not have to know the cache is two-tiered.
+    func invalidate(_ file: YiFile) {
+        cache.removeObject(forKey: file.path as NSString)
+        inFlight[file.path]?.cancel()
+        inFlight[file.path] = nil
+        let cameraID = self.cameraID
+        Task.detached(priority: .utility) {
+            await ThumbnailCache.shared.remove(file, cameraID: cameraID)
+        }
+    }
+
+    /// Reconciles the disk cache with the camera's current contents.
+    ///
+    /// Resolves the camera id internally, from the same source `store` uses, so
+    /// eviction cannot run against a different partition than the one written.
+    func reconcile(with files: [YiFile], evictOrphans: Bool) {
+        let cameraID = self.cameraID
+        Task.detached(priority: .utility) {
+            if evictOrphans {
+                await ThumbnailCache.shared.evictEntriesNotIn(files, cameraID: cameraID)
+            }
+            await ThumbnailCache.shared.enforceSizeLimitIfNeeded()
+        }
     }
 
     /// Photo preview: the `.THM` sidecar, or the original if there is none.
@@ -212,12 +243,6 @@ final class ThumbnailLoader: ObservableObject {
         return image
     }
 
-    /// Drops cached previews for files that no longer exist.
-    func invalidate(_ file: YiFile) {
-        cache.removeObject(forKey: file.path as NSString)
-        inFlight[file.path]?.cancel()
-        inFlight[file.path] = nil
-    }
 }
 
 /// Preview of the shot just captured, built from the path the camera reports in

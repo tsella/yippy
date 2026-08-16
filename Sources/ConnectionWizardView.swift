@@ -21,29 +21,21 @@ struct ConnectionWizardView: View {
 
     /// Explains *why* the button is disabled, so a greyed-out control is never
     /// a dead end.
-    private var statusText: String {
+    /// One row per state, rather than three switches that must stay in step.
+    private var statusStyle: (text: String, icon: String, color: Color) {
         switch reachability.status {
-        case .reachable:   "Camera found at 192.168.42.1"
-        case .unreachable: "Camera not found — check the YDXJ_ network and that the camera is awake"
-        case .noWiFi:      "Wi-Fi is off — join the camera's YDXJ_ network in Settings"
-        case .checking, .unknown: "Looking for the camera…"
-        }
-    }
-
-    private var statusIcon: String {
-        switch reachability.status {
-        case .reachable:   "checkmark.circle.fill"
-        case .unreachable: "wifi.exclamationmark"
-        case .noWiFi:      "wifi.slash"
-        case .checking, .unknown: "antenna.radiowaves.left.and.right"
-        }
-    }
-
-    private var statusColor: Color {
-        switch reachability.status {
-        case .reachable:          .green
-        case .unreachable, .noWiFi: .orange
-        case .checking, .unknown: .secondary
+        case .reachable:
+            ("Camera found at \(YiCameraClient.host)",
+             "checkmark.circle.fill", .green)
+        case .unreachable:
+            ("Camera not found — check the YDXJ_ network and that the camera is awake",
+             "wifi.exclamationmark", .orange)
+        case .noWiFi:
+            ("Wi-Fi is off — join the camera's YDXJ_ network in Settings",
+             "wifi.slash", .orange)
+        case .checking:
+            ("Looking for the camera…",
+             "antenna.radiowaves.left.and.right", .secondary)
         }
     }
 
@@ -53,15 +45,15 @@ struct ConnectionWizardView: View {
     /// time the status changed.
     private var statusRow: some View {
         HStack(alignment: .top, spacing: 6) {
-            Image(systemName: statusIcon)
+            Image(systemName: statusStyle.icon)
                 .frame(width: 16)
-            Text(statusText)
+            Text(statusStyle.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .lineLimit(3)
             Spacer(minLength: 0)
         }
         .font(.caption)
-        .foregroundStyle(statusColor)
+        .foregroundStyle(statusStyle.color)
         // Fixed box, content top-aligned: a one-line message sits at the top
         // rather than centring itself in the reserved space.
         .frame(maxWidth: .infinity, minHeight: reservedStatusHeight,

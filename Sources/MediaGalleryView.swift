@@ -43,15 +43,15 @@ struct MediaGalleryView: View {
             if isSelecting { selectionBar }
         }
         .task {
-            // Partition the thumbnail cache by camera before anything reads it.
-            ThumbnailLoader.shared.setCameraID(client.cameraID)
             // Only load on first appearance; pull-to-refresh handles the rest.
             if fileManager.files.isEmpty { await fileManager.listFiles() }
         }
         // The camera pushes photo_taken / video_record_complete when new media
         // lands on the card, so the gallery refreshes itself instead of polling.
         .onChange(of: client.mediaChangeCount) { _ in
-            Task { await fileManager.listFiles() }
+            // Capture-driven refresh: a new file can only have been added, so
+            // skip the orphan sweep and keep this path light.
+            Task { await fileManager.listFiles(fullRefresh: false) }
         }
         .overlay { downloadOverlay }
         .overlay {

@@ -22,6 +22,10 @@ actor ThumbnailCache {
     private static let maxBytes: Int64 = 128 * 1024 * 1024
 
     private let root: URL
+    /// Running byte total, measured once then maintained incrementally.
+    private var totalBytes: Int64?
+    /// Partitions whose directory has already been created this session.
+    private var preparedPartitions: Set<String> = []
 
     private init() {
         // Caches, not Documents: the system may reclaim this under storage
@@ -52,25 +56,38 @@ actor ThumbnailCache {
 
     func image(for file: YiFile, cameraID: String) -> UIImage? {
         let url = location(cameraID: cameraID, file: file)
+        // No modification-date touch on read: that is a filesystem *write* per
+        // cache hit, so scrolling a gallery would mutate metadata once per
+        // visible cell. Eviction falls back to write order, which is fine for a
+        // bounded, regenerable cache.
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
               let image = UIImage(data: data) else { return nil }
-
-        // Touch so eviction can favour recently used entries.
-        try? FileManager.default.setAttributes([.modificationDate: Date()],
-                                               ofItemAtPath: url.path)
         return image
     }
 
     func store(_ image: UIImage, for file: YiFile, cameraID: String) {
         guard let data = image.jpegData(compressionQuality: 0.8) else { return }
-        let directory = directory(for: cameraID)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? data.write(to: location(cameraID: cameraID, file: file), options: .atomic)
+
+        // Creating the directory is only needed once per camera.
+        if !preparedPartitions.contains(cameraID) {
+            try? FileManager.default.createDirectory(at: directory(for: cameraID),
+                                                     withIntermediateDirectories: true)
+            preparedPartitions.insert(cameraID)
+        }
+
+        let url = location(cameraID: cameraID, file: file)
+        guard (try? data.write(to: url, options: .atomic)) != nil else { return }
+        // Track the total so the size limit does not need a full-tree sweep to
+        // discover the cache is under budget.
+        if let known = totalBytes { totalBytes = known + Int64(data.count) }
     }
 
     /// Drops a single entry — used when its file is deleted from the camera.
     func remove(_ file: YiFile, cameraID: String) {
-        try? FileManager.default.removeItem(at: location(cameraID: cameraID, file: file))
+        let url = location(cameraID: cameraID, file: file)
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { $0 }
+        try? FileManager.default.removeItem(at: url)
+        if let known = totalBytes, let size { totalBytes = max(0, known - Int64(size)) }
     }
 
     // MARK: - Eviction
@@ -92,8 +109,30 @@ actor ThumbnailCache {
         }
     }
 
+    /// Trims the cache only when the running total says it is over budget.
+    ///
+    /// The full sweep is a recursive enumeration plus a stat per entry, so it
+    /// must not run on every listing — it is called after each refresh, which
+    /// includes every capture.
+    func enforceSizeLimitIfNeeded() {
+        if totalBytes == nil { totalBytes = measureTotal() }
+        guard let total = totalBytes, total > Self.maxBytes else { return }
+        enforceSizeLimit()
+    }
+
+    private func measureTotal() -> Int64 {
+        guard let entries = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: [.fileSizeKey]
+        )?.compactMap({ $0 as? URL }) else { return 0 }
+        return entries.reduce(into: Int64(0)) { total, url in
+            if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                total += Int64(size)
+            }
+        }
+    }
+
     /// Trims the whole cache to `maxBytes`, oldest first.
-    func enforceSizeLimit() {
+    private func enforceSizeLimit() {
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
         guard let entries = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: keys
@@ -109,16 +148,12 @@ actor ThumbnailCache {
             total += Int64(size)
         }
 
+        defer { totalBytes = total }
         guard total > Self.maxBytes else { return }
         for entry in sized.sorted(by: { $0.date < $1.date }) {
             try? FileManager.default.removeItem(at: entry.url)
             total -= entry.size
             if total <= Self.maxBytes { return }
         }
-    }
-
-    /// Drops everything for one camera.
-    func clear(cameraID: String) {
-        try? FileManager.default.removeItem(at: directory(for: cameraID))
     }
 }

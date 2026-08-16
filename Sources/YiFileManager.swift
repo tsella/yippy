@@ -125,7 +125,10 @@ class YiFileManager: ObservableObject {
 
     // MARK: - Listing
 
-    func listFiles() async {
+    /// - Parameter fullRefresh: `true` for a user-initiated load (first
+    ///   appearance, pull-to-refresh), which also reconciles the thumbnail
+    ///   cache. `false` for the automatic refresh after a capture.
+    func listFiles(fullRefresh: Bool = true) async {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
@@ -168,15 +171,12 @@ class YiFileManager: ObservableObject {
                 .filter { !$0.isThumbnail }
                 .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
 
-            // The listing is now known to be complete, so anything cached for
-            // this camera that is not in it refers to media that has since been
-            // deleted — on the camera, or from another device.
-            let listed = files
-            let cameraID = client.cameraID
-            Task.detached(priority: .utility) {
-                await ThumbnailCache.shared.evictEntriesNotIn(listed, cameraID: cameraID)
-                await ThumbnailCache.shared.enforceSizeLimit()
-            }
+            // The listing is complete, so anything cached for this camera and
+            // not in it refers to media deleted elsewhere. Only sweep for
+            // orphans on a full refresh: a listing triggered by a capture can
+            // only have *added* a file, and that path must stay quiet — the
+            // camera is fragile immediately after writing media.
+            ThumbnailLoader.shared.reconcile(with: files, evictOrphans: fullRefresh)
         } catch {
             errorMessage = (error as? YiCameraError)?.errorDescription ?? error.localizedDescription
         }
@@ -247,6 +247,15 @@ class YiFileManager: ObservableObject {
         YiCameraClient.clockFormatter.date(from: raw.trimmingCharacters(in: .whitespaces))
     }
 
+    /// One phrasing for both batch operations, so a partial failure reports the
+    /// same level of detail whichever one the user ran.
+    private static func failureMessage(verb: String, failures: [String], total: Int) -> String {
+        guard failures.count > 1 else { return "Could not \(verb) \(failures[0])." }
+        let named = failures.prefix(3).joined(separator: ", ")
+        let ellipsis = failures.count > 3 ? "…" : ""
+        return "Could not \(verb) \(failures.count) of \(total) files: \(named)\(ellipsis)"
+    }
+
     // MARK: - Mutation
 
     func deleteFile(_ file: YiFile) async {
@@ -284,22 +293,16 @@ class YiFileManager: ObservableObject {
 
                 files.removeAll { $0.id == file.id }
                 // The camera reuses filenames, so a stale cached preview would
-                // otherwise show up against a different file later. Drop it
-                // from disk as well as memory.
+                // otherwise show up against a different file later.
                 ThumbnailLoader.shared.invalidate(file)
-                let cameraID = client.cameraID
-                Task.detached(priority: .utility) {
-                    await ThumbnailCache.shared.remove(file, cameraID: cameraID)
-                }
             } catch {
                 failures.append(file.name)
             }
         }
 
         if !failures.isEmpty {
-            errorMessage = failures.count == 1
-                ? "Could not delete \(failures[0])."
-                : "Could not delete \(failures.count) of \(targets.count) files: \(failures.prefix(3).joined(separator: ", "))\(failures.count > 3 ? "…" : "")"
+            errorMessage = Self.failureMessage(verb: "delete", failures: failures,
+                                               total: targets.count)
         }
     }
 
@@ -365,9 +368,8 @@ class YiFileManager: ObservableObject {
             }
 
             if !failures.isEmpty {
-                self.errorMessage = failures.count == 1
-                    ? "Could not save \(failures[0])."
-                    : "Could not save \(failures.count) of \(targets.count) files."
+                self.errorMessage = Self.failureMessage(verb: "save", failures: failures,
+                                                        total: targets.count)
             } else if saved == 1 {
                 self.savedMessage = "\(targets[0].name) saved to Photos"
             } else if saved > 1 {

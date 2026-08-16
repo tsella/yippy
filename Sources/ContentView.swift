@@ -11,6 +11,9 @@ struct ContentView: View {
         let client = YiCameraClient()
         _client = StateObject(wrappedValue: client)
         _fileManager = StateObject(wrappedValue: YiFileManager(client: client))
+        // Wire the thumbnail cache to this camera up front, so every screen —
+        // not just the gallery — reads and writes the right partition.
+        ThumbnailLoader.shared.attach(to: client)
     }
 
     var body: some View {

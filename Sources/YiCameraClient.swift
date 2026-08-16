@@ -31,8 +31,24 @@ class YiCameraClient: ObservableObject {
 
     // MARK: Configuration
 
-    private nonisolated static let host = "192.168.42.1"
-    private nonisolated static let controlPort: UInt16 = 7878
+    /// The camera's fixed address. Shared so nothing dials a second copy of it.
+    nonisolated static let host = "192.168.42.1"
+    nonisolated static let controlPort: UInt16 = 7878
+
+    /// Parameters for any connection to the camera.
+    ///
+    /// The Wi-Fi pin is mandatory: the camera's network has no internet, so
+    /// iOS would otherwise route over cellular and fail with EADDRNOTAVAIL.
+    /// Shared so that rule is enforced in one place.
+    nonisolated static func controlParameters() -> NWParameters {
+        let parameters = NWParameters.tcp
+        parameters.requiredInterfaceType = .wifi
+        return parameters
+    }
+
+    nonisolated static func controlEndpoint() -> (host: NWEndpoint.Host, port: NWEndpoint.Port) {
+        (NWEndpoint.Host(host), NWEndpoint.Port(rawValue: controlPort)!)
+    }
 
     /// The camera drops idle sessions after ~20 minutes. Poll well inside that.
     private nonisolated static let heartbeatInterval: Duration = .seconds(5)
@@ -121,20 +137,14 @@ class YiCameraClient: ObservableObject {
     func connect() {
         guard connection == nil else { return }
 
-        let parameters = NWParameters.tcp
-        // The camera's Wi-Fi has no internet, so iOS will otherwise route this
-        // over cellular and fail with EADDRNOTAVAIL (49).
-        parameters.requiredInterfaceType = .wifi
+        let parameters = Self.controlParameters()
         // Control messages are small and latency-sensitive.
         if let tcp = parameters.defaultProtocolStack.internetProtocol as? NWProtocolTCP.Options {
             tcp.noDelay = true
         }
 
-        let connection = NWConnection(
-            host: NWEndpoint.Host(Self.host),
-            port: NWEndpoint.Port(rawValue: Self.controlPort)!,
-            using: parameters
-        )
+        let endpoint = Self.controlEndpoint()
+        let connection = NWConnection(host: endpoint.host, port: endpoint.port, using: parameters)
         self.connection = connection
 
         connection.stateUpdateHandler = { [weak self] state in
