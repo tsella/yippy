@@ -8,6 +8,7 @@ import SwiftUI
 /// opened like any other directory.
 struct DirectoryBrowserView: View {
     @ObservedObject var client: YiCameraClient
+    @ObservedObject var fileManager: YiFileManager
     @StateObject private var explorer: FilesystemExplorer
 
     @State private var path: String
@@ -15,8 +16,9 @@ struct DirectoryBrowserView: View {
     @State private var isLoading = false
     @State private var errorText: String?
 
-    init(client: YiCameraClient, path: String = "/") {
+    init(client: YiCameraClient, fileManager: YiFileManager, path: String = "/") {
         self.client = client
+        self.fileManager = fileManager
         _path = State(initialValue: path)
         _explorer = StateObject(wrappedValue: FilesystemExplorer(client: client))
     }
@@ -42,17 +44,44 @@ struct DirectoryBrowserView: View {
                 }
             }
 
-            // Every row is a link, including ones that look like files.
-            // Directory detection from a listing is unreliable — a Linux
-            // directory commonly reports a real size ("4096 bytes"), which is
-            // indistinguishable from a file. Rather than guess and leave real
-            // directories un-tappable, let the camera decide: opening a plain
-            // file simply lists nothing.
             ForEach(sorted) { entry in
-                NavigationLink {
-                    DirectoryBrowserView(client: client, path: entry.path)
-                } label: {
-                    row(entry)
+                if entry.isImage && entry.isDownloadable {
+                    // Images open in a viewer rather than listing as a path.
+                    NavigationLink {
+                        RemoteImageView(path: entry.path, name: entry.name)
+                    } label: {
+                        row(entry)
+                    }
+                } else if entry.isDownloadable {
+                    // A file the camera did not mark as a directory. Tapping
+                    // still browses — the marker is absent on some firmwares —
+                    // but a download action is offered alongside.
+                    NavigationLink {
+                        DirectoryBrowserView(client: client, fileManager: fileManager, path: entry.path)
+                    } label: {
+                        row(entry)
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button {
+                            download(entry)
+                        } label: {
+                            Label("Download", systemImage: "square.and.arrow.down")
+                        }
+                        .tint(.blue)
+                    }
+                    .contextMenu {
+                        Button {
+                            download(entry)
+                        } label: {
+                            Label("Download", systemImage: "square.and.arrow.down")
+                        }
+                    }
+                } else {
+                    NavigationLink {
+                        DirectoryBrowserView(client: client, fileManager: fileManager, path: entry.path)
+                    } label: {
+                        row(entry)
+                    }
                 }
             }
         }
@@ -93,6 +122,16 @@ struct DirectoryBrowserView: View {
             }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
+    }
+
+    /// Saves an arbitrary camera file to the photo library.
+    ///
+    /// Reuses the gallery's download path by describing the entry as a
+    /// `YiFile`, so staging, saving and cleanup behave identically.
+    private func download(_ entry: FilesystemExplorer.Entry) {
+        let file = YiFile(name: entry.name, path: entry.path,
+                          size: entry.size, date: nil)
+        fileManager.downloadFile(file)
     }
 
     private func load() async {

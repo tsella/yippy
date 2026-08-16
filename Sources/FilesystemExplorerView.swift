@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FilesystemExplorerView: View {
     @ObservedObject var client: YiCameraClient
+    @ObservedObject var fileManager: YiFileManager
     @StateObject private var explorer: FilesystemExplorer
 
     @State private var root = "/"
@@ -9,8 +10,9 @@ struct FilesystemExplorerView: View {
     @State private var showingLog = false
     @FocusState private var rootFocused: Bool
 
-    init(client: YiCameraClient) {
+    init(client: YiCameraClient, fileManager: YiFileManager) {
         self.client = client
+        self.fileManager = fileManager
         _explorer = StateObject(wrappedValue: FilesystemExplorer(client: client))
     }
 
@@ -124,7 +126,7 @@ struct FilesystemExplorerView: View {
                         // listing is unreliable, so don't gate navigation on it.
                         ForEach(grouped[level] ?? []) { entry in
                             NavigationLink {
-                                DirectoryBrowserView(client: client, path: entry.path)
+                                DirectoryBrowserView(client: client, fileManager: fileManager, path: entry.path)
                             } label: {
                                 row(entry)
                             }

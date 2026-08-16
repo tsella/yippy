@@ -22,9 +22,22 @@ final class FilesystemExplorer: ObservableObject {
         var id: String { path }
         let path: String
         let name: String
+        /// Best guess, combining the explicit marker with a size heuristic.
         let isDirectory: Bool
+        /// The camera named this entry with a trailing `/`. Unlike
+        /// `isDirectory` this is the firmware's own statement, not inference,
+        /// so it is safe to gate destructive or download actions on.
+        var isMarkedDirectory: Bool = false
         let size: Int64
         let depth: Int
+
+        /// Whether this entry can be fetched from the camera's HTTP server.
+        var isDownloadable: Bool { !isMarkedDirectory }
+
+        var isImage: Bool {
+            ["jpg", "jpeg", "png", "bmp", "gif", "thm"]
+                .contains((name as NSString).pathExtension.lowercased())
+        }
     }
 
     @Published private(set) var entries: [Entry] = []
@@ -162,10 +175,17 @@ final class FilesystemExplorer: ObservableObject {
                 // `.` and `..` would immediately cycle the walk.
                 guard name != ".", name != ".." else { return nil }
 
-                let (size, isDirectory) = Self.describe(value)
-                return Entry(path: join(directory, name),
-                             name: name,
-                             isDirectory: isDirectory,
+                let (size, inferredDirectory) = Self.describe(value)
+                // A trailing slash on the name is this firmware's explicit
+                // directory marker, and is far more reliable than inferring
+                // from the size — a Linux directory reports a real block size
+                // that is indistinguishable from a file's.
+                let markedDirectory = name.hasSuffix("/")
+                let trimmedName = markedDirectory ? String(name.dropLast()) : name
+                return Entry(path: join(directory, trimmedName),
+                             name: trimmedName,
+                             isDirectory: markedDirectory || inferredDirectory,
+                             isMarkedDirectory: markedDirectory,
                              size: size,
                              depth: depth)
             }

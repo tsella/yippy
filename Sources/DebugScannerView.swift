@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DebugScannerView: View {
     @ObservedObject var client: YiCameraClient
+    @ObservedObject var fileManager: YiFileManager
     @State private var startId = "1"
     @State private var endId = "500"
     @FocusState private var focusedField: Field?
@@ -11,7 +12,7 @@ struct DebugScannerView: View {
     var body: some View {
         VStack(spacing: 0) {
             NavigationLink {
-                DirectoryBrowserView(client: client)
+                DirectoryBrowserView(client: client, fileManager: fileManager)
             } label: {
                 Label("Browse Filesystem", systemImage: "folder")
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -21,7 +22,7 @@ struct DebugScannerView: View {
             Divider()
 
             NavigationLink {
-                FilesystemExplorerView(client: client)
+                FilesystemExplorerView(client: client, fileManager: fileManager)
             } label: {
                 Label("Bulk Filesystem Walk", systemImage: "folder.badge.questionmark")
                     .frame(maxWidth: .infinity, alignment: .leading)

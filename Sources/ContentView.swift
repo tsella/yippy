@@ -32,7 +32,7 @@ struct ContentView: View {
 
                     if showDebugScanner {
                         NavigationStack {
-                            DebugScannerView(client: client)
+                            DebugScannerView(client: client, fileManager: fileManager)
                         }
                         .tabItem { Label("Scanner", systemImage: "terminal") }
                     }

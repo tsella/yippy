@@ -24,6 +24,7 @@
 		88E443CAC288BDA7F0AC6E58 /* ConfirmationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14421FCF5C9AD1BE6B2EA6B2 /* ConfirmationOverlay.swift */; };
 		89E34CAA8E40839A46CE92AD /* ThumbnailLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B0D6706E9F21C6DBED83E1 /* ThumbnailLoader.swift */; };
 		AAD62EAD484F7F70B9813C2B /* Pods_YiCamera.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26A2D7AE8BE04A318C23C989 /* Pods_YiCamera.framework */; };
+		B29B64E26FBE69D9CCF00AD4 /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EA1D69D3E81FF6F35F81BF0 /* RemoteImageView.swift */; };
 		C6B363D1324C9B1748CEAD2B /* YiFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D9963AC4352A77659468007 /* YiFileManager.swift */; };
 		D02716A320B8777792B20318 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FBACEADC17BB02EAED492583 /* Assets.xcassets */; };
 		D7106146FD97D9079BDD1378 /* ThumbnailCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9048F73D8BEF0DECEB4C984C /* ThumbnailCache.swift */; };
@@ -59,6 +60,7 @@
 		273ACF502B292D8FAAE36580 /* CameraReachability.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraReachability.swift; path = CameraReachability.swift; sourceTree = "<group>"; };
 		2BEA5EE6BEB0821F07C11A4D /* YiCamera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YiCamera.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D9963AC4352A77659468007 /* YiFileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiFileManager.swift; sourceTree = "<group>"; };
+		2EA1D69D3E81FF6F35F81BF0 /* RemoteImageView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteImageView.swift; path = RemoteImageView.swift; sourceTree = "<group>"; };
 		2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGalleryView.swift; sourceTree = "<group>"; };
 		46DE48B702625215760DA914 /* AmbarellaProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbarellaProtocol.swift; sourceTree = "<group>"; };
 		50BC81AA1F6746540BD574A2 /* Pods-YiCamera.release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Pods-YiCamera.release.xcconfig"; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 				84C03CA163D76352321562BB /* MediaDetailView.swift */,
 				273ACF502B292D8FAAE36580 /* CameraReachability.swift */,
 				9048F73D8BEF0DECEB4C984C /* ThumbnailCache.swift */,
+				2EA1D69D3E81FF6F35F81BF0 /* RemoteImageView.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -289,6 +292,7 @@
 				E5A9E8F9A117050CDFB86C84 /* MediaDetailView.swift in Sources */,
 				2594BE87EA95D23FFF7C3617 /* CameraReachability.swift in Sources */,
 				D7106146FD97D9079BDD1378 /* ThumbnailCache.swift in Sources */,
+				B29B64E26FBE69D9CCF00AD4 /* RemoteImageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
