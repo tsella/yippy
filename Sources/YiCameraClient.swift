@@ -96,6 +96,15 @@ class YiCameraClient: ObservableObject {
         isStreamSessionHeld = false
     }
 
+    /// Re-requests the stream after a record-mode change drops it.
+    private var viewfinderRevival: Task<Void, Never>?
+    /// Published so the dashboard can say the stream is coming back rather
+    /// than offering a manual restart that would compete with the revival.
+    @Published private(set) var isReviving = false
+    /// Enough for the mode change to settle, few enough that a firmware which
+    /// cannot stream while recording is not flooded with retries.
+    private static let viewfinderRevivalAttempts = 3
+
     /// True between `start_photo_capture` and the capture finishing.
     ///
     /// The camera is single-threaded while it writes a photo: sending another
@@ -211,9 +220,11 @@ class YiCameraClient: ObservableObject {
     }
 
     private func teardown(reason: String?) {
-        receiveTask?.cancel();   receiveTask = nil
-        heartbeatTask?.cancel(); heartbeatTask = nil
-        scanTask?.cancel();      scanTask = nil
+        receiveTask?.cancel();      receiveTask = nil
+        heartbeatTask?.cancel();    heartbeatTask = nil
+        scanTask?.cancel();         scanTask = nil
+        viewfinderRevival?.cancel(); viewfinderRevival = nil
+        isReviving = false
 
         connection?.stateUpdateHandler = nil
         connection?.cancel()
@@ -408,6 +419,11 @@ class YiCameraClient: ObservableObject {
                 return
             }
             isViewfinderActive = false
+            // Starting a recording switches video mode, which tears the RTSP
+            // server down. The camera recovers — it re-emits vf_start by itself
+            // after a photo capture — but not after a mode change, so the
+            // stream has to be asked for again.
+            reviveViewfinderAfterModeChange()
         default:
             break
         }
@@ -688,9 +704,56 @@ class YiCameraClient: ObservableObject {
         }
     }
 
+    /// Re-requests the stream after the camera dropped it for a mode change.
+    ///
+    /// `RECORD_START` switches the camera's video mode and the RTSP server goes
+    /// with it, reported as `vf_stop`. The official app kept its preview through
+    /// this, and the camera re-emits `vf_start` unprompted after a *photo*
+    /// capture, so the server can come back — it just is not automatic after a
+    /// mode change. Re-issuing `259` once the mode has settled restores it.
+    ///
+    /// **Bounded on purpose.** If a firmware genuinely cannot stream while
+    /// recording, an open-ended retry is the same request flood that has wedged
+    /// this camera before, so it gives up and leaves the viewfinder off rather
+    /// than hammering a camera that will never answer.
+    private func reviveViewfinderAfterModeChange() {
+        guard viewfinderRequested, !isReviving else { return }
+        isReviving = true
+
+        viewfinderRevival = Task { [weak self] in
+            defer { self?.isReviving = false }
+
+            for attempt in 1...Self.viewfinderRevivalAttempts {
+                // Let the mode change settle. Asking too early draws an error
+                // and, worse, adds traffic while the camera is reconfiguring.
+                try? await Task.sleep(for: .milliseconds(1200))
+                guard let self, !Task.isCancelled else { return }
+                guard self.viewfinderRequested, !self.isViewfinderActive else { return }
+                // Never compete with a capture — sendRaw would block anyway,
+                // but queueing behind one wastes an attempt on a stale state.
+                guard !self.isCapturing else { continue }
+
+                print("Reviving viewfinder after mode change (attempt \(attempt))")
+                do {
+                    _ = try await self.send(.startViewfinder, param: "none_force")
+                    // The camera confirms with vf_start, which remounts the
+                    // player. Trust the notification rather than assuming.
+                    return
+                } catch {
+                    print("Viewfinder revival attempt \(attempt) failed: \(error.localizedDescription)")
+                }
+            }
+            print("Giving up on viewfinder revival — the camera did not restore the stream")
+        }
+    }
+
     /// Stops and restarts the stream. `260` then `259` resets the camera's RTSP
     /// server, which is the documented recovery when the viewfinder wedges.
     func restartViewfinder() async {
+        // The 260 below draws its own vf_stop; cancel any revival so it does
+        // not race the 259 this method already issues.
+        viewfinderRevival?.cancel(); viewfinderRevival = nil
+        isReviving = false
         isViewfinderActive = false
         _ = try? await send(.stopViewfinder)
         try? await Task.sleep(for: .milliseconds(500))
@@ -700,8 +763,12 @@ class YiCameraClient: ObservableObject {
     /// Stops the RTSP server. Also re-enables the physical shutter button on
     /// some firmwares, which `startViewfinder` disables.
     func stopViewfinder() async {
-        _ = try? await send(.stopViewfinder)
+        // Clear the request flag first: the 260 below draws a vf_stop, and a
+        // revival racing that would restart the stream we are shutting down.
         viewfinderRequested = false
+        viewfinderRevival?.cancel(); viewfinderRevival = nil
+        isReviving = false
+        _ = try? await send(.stopViewfinder)
         isViewfinderActive = false
     }
 

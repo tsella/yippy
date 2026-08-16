@@ -125,13 +125,27 @@ session claimed locks the viewfinder out for the rest of the connection**, so
 the release is driven by `onChange` and `onDisappear` rather than the success
 path alone.
 
-### Recording stops the viewfinder, and changes the encoder
+### Recording stops the viewfinder — ask for it back
 
-`RECORD_START` (513) is followed by `start_video_record` **and `vf_stop`** — the
-camera tears its RTSP server down for the duration. `isViewfinderActive` goes
-false, the player unmounts, and it remounts when recording ends. That cycle is
-normal, not an error; the stream must survive being restarted rather than
-treating the first `vf_stop` as fatal.
+`RECORD_START` (513) is followed by `start_video_record` **and `vf_stop`**: the
+camera switches video mode and its RTSP server goes with it. That cycle is
+normal, not an error.
+
+**The stream does not come back on its own, but it does come back.** The
+official app kept its preview through recording, and the camera re-emits
+`vf_start` unprompted after a *photo* capture — so the server can restart; it
+just is not automatic after a mode change. `reviveViewfinderAfterModeChange()`
+re-issues `259` once the mode has settled and lets the resulting `vf_start`
+remount the player.
+
+**It is bounded to three attempts on purpose.** If a firmware genuinely cannot
+stream while recording, an open-ended retry is the same request flood that has
+wedged this camera before. It gives up and leaves the viewfinder off.
+
+Anything that issues `260` — `stopViewfinder()`, `restartViewfinder()` — must
+cancel a pending revival first, since that `260` draws its own `vf_stop` and the
+revival would otherwise restart a stream that is being deliberately shut down.
+`viewfinderRequested` is cleared *before* the `260` for the same reason.
 
 **The SDP is not stable across that cycle.** Two `DESCRIBE`s either side of a
 recording returned `profile-level-id=4D401E` and then `4D4015` — the camera

@@ -127,14 +127,21 @@ struct DashboardView: View {
                 ZStack {
                     Color(.darkGray)
                     VStack(spacing: 12) {
-                        Image(systemName: "video.slash")
-                            .font(.largeTitle)
-                        Text("Stream Unavailable")
-                        Button("Restart Stream") {
-                            Task { await client.startViewfinder() }
+                        if client.isReviving {
+                            // Recording switches video mode and takes the RTSP
+                            // server with it; the client is asking for it back.
+                            ProgressView().tint(.white)
+                            Text("Restoring preview…")
+                        } else {
+                            Image(systemName: "video.slash")
+                                .font(.largeTitle)
+                            Text("Stream Unavailable")
+                            Button("Restart Stream") {
+                                Task { await client.restartViewfinder() }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.white)
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.white)
                     }
                     .foregroundStyle(.gray)
                 }
