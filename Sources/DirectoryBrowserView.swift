@@ -96,6 +96,10 @@ struct DirectoryBrowserView: View {
     }
 
     private func load() async {
+        // .task, .refreshable and the Refresh button can all fire this, and
+        // SwiftUI re-runs .task on identity changes — without this guard they
+        // stack up into a burst of identical listings.
+        guard !isLoading else { return }
         guard client.isConnected else {
             errorText = "Camera not connected."
             return

@@ -90,6 +90,10 @@ class YiCameraClient: ObservableObject {
     private var captureWatchdog: Task<Void, Never>?
     /// Requests parked until the capture completes.
     private var captureWaiters: [CheckedContinuation<Void, Never>] = []
+    /// Whether a request currently owns the control channel.
+    private var channelBusy = false
+    /// Requests queued behind the one in flight, released in order.
+    private var channelWaiters: [CheckedContinuation<Void, Never>] = []
     /// Advertised by the START_SESSION response; falls back to the documented
     /// default if the firmware does not report one.
     @Published private(set) var streamURL = URL(string: "rtsp://192.168.42.1/live")!
@@ -202,9 +206,13 @@ class YiCameraClient: ObservableObject {
         isScanning = false
         isViewfinderActive = false
         viewfinderRequested = false
-        // Release the capture gate, or requests parked behind it would hang
+        // Release both gates, or requests parked behind them would hang
         // forever after a disconnect instead of failing with notConnected.
         endCapture()
+        channelBusy = false
+        let queued = channelWaiters
+        channelWaiters.removeAll()
+        for waiter in queued { waiter.resume() }
         token = 0
         dataBuffer.removeAll()
 
@@ -236,7 +244,13 @@ class YiCameraClient: ObservableObject {
                     self.processBuffer()
                 } catch {
                     if !Task.isCancelled {
-                        self.teardown(reason: "Connection lost: \(error.localizedDescription)")
+                        // A reset here usually means the camera's TCP server
+                        // died rather than the Wi-Fi dropping — reconnecting
+                        // will not help until it is power-cycled.
+                        let reset = (error as? NWError).map { "\($0)".contains("54") } ?? false
+                        self.teardown(reason: reset
+                            ? "The camera stopped responding. Switch it off and on again."
+                            : "Connection lost: \(error.localizedDescription)")
                     }
                     return
                 }
@@ -430,6 +444,14 @@ class YiCameraClient: ObservableObject {
     /// SD card, probing unknown ids).
     func sendRaw(msgId: Int, param: String? = nil, type: String? = nil,
                  timeout: Duration = YiCameraClient.requestTimeout) async throws -> [String: Any] {
+        // The camera answers one request at a time, so send one at a time.
+        // Without this, a view that re-enters its load (SwiftUI re-runs .task
+        // on identity changes, and .refreshable can overlap it) queues dozens
+        // of identical commands back to back and the camera resets the
+        // connection. Serialising here means no caller can flood it.
+        await acquireChannel()
+        defer { releaseChannel() }
+
         // Wait out an in-flight capture rather than relying on every caller to
         // check `isCapturing`. The camera is single-threaded while writing a
         // photo, and one command sent in that window wedges its TCP server for
@@ -845,6 +867,23 @@ class YiCameraClient: ObservableObject {
     private func awaitCaptureCompletion() async {
         guard isCapturing else { return }
         await withCheckedContinuation { captureWaiters.append($0) }
+    }
+
+    // MARK: - Control channel serialisation
+
+    /// Takes exclusive use of the control channel, waiting if another request
+    /// holds it. The camera handles one request at a time.
+    private func acquireChannel() async {
+        while channelBusy {
+            await withCheckedContinuation { channelWaiters.append($0) }
+        }
+        channelBusy = true
+    }
+
+    private func releaseChannel() {
+        channelBusy = false
+        guard !channelWaiters.isEmpty else { return }
+        channelWaiters.removeFirst().resume()
     }
 
     // MARK: - Camera actions
