@@ -25,7 +25,7 @@
 		6CA7BB44303AEE4DBD5373FB /* FilesystemExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C98BACB6F7D7E8EC5A182C /* FilesystemExplorer.swift */; };
 		7A353AB11810A8CC7B6B289B /* MediaGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */; };
 		7A5CEAB1B4A7D45E4CEC6DAE /* RTSPProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69DE18678DDD6B9B0A393B39 /* RTSPProbe.swift */; };
-		7EC3EF958358652F3A1DB18C /* RTSPPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FABD929DABAFE4C0019A96A2 /* RTSPPlayerView.swift */; };
+		8024B63461D05993FF7CB22A /* Pods_YiCamera.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 45E7620174EF1018C5F35DF6 /* Pods_YiCamera.framework */; };
 		87C7B784C91A8AF62F28A03E /* DirectoryBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671753AA31C7C94F62615B93 /* DirectoryBrowserView.swift */; };
 		88E443CAC288BDA7F0AC6E58 /* ConfirmationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14421FCF5C9AD1BE6B2EA6B2 /* ConfirmationOverlay.swift */; };
 		89E34CAA8E40839A46CE92AD /* ThumbnailLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B0D6706E9F21C6DBED83E1 /* ThumbnailLoader.swift */; };
@@ -65,12 +65,14 @@
 		23C98BACB6F7D7E8EC5A182C /* FilesystemExplorer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FilesystemExplorer.swift; path = FilesystemExplorer.swift; sourceTree = "<group>"; };
 		273ACF502B292D8FAAE36580 /* CameraReachability.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraReachability.swift; path = CameraReachability.swift; sourceTree = "<group>"; };
 		2BEA5EE6BEB0821F07C11A4D /* YiCamera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YiCamera.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2C74C55E47985D073C55AD6E /* Pods-YiCamera.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YiCamera.debug.xcconfig"; path = "Target Support Files/Pods-YiCamera/Pods-YiCamera.debug.xcconfig"; sourceTree = "<group>"; };
 		2D9963AC4352A77659468007 /* YiFileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiFileManager.swift; sourceTree = "<group>"; };
 		2EA1D69D3E81FF6F35F81BF0 /* RemoteImageView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteImageView.swift; path = RemoteImageView.swift; sourceTree = "<group>"; };
 		2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGalleryView.swift; sourceTree = "<group>"; };
 		386A8A55E950CE50CE06867D /* RTSPStream.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RTSPStream.swift; path = RTSPStream.swift; sourceTree = "<group>"; };
 		3D8F2F2BEF33D2A6C64274A6 /* H264StreamView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = H264StreamView.swift; path = H264StreamView.swift; sourceTree = "<group>"; };
 		41C775176A2EA4162BD25AB0 /* H264Depacketizer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = H264Depacketizer.swift; path = H264Depacketizer.swift; sourceTree = "<group>"; };
+		45E7620174EF1018C5F35DF6 /* Pods_YiCamera.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YiCamera.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		46DE48B702625215760DA914 /* AmbarellaProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbarellaProtocol.swift; sourceTree = "<group>"; };
 		50BC81AA1F6746540BD574A2 /* Pods-YiCamera.release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Pods-YiCamera.release.xcconfig"; sourceTree = "<group>"; };
 		5C765062CB0D3EBB3916CDE9 /* RTSPProbeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RTSPProbeView.swift; path = RTSPProbeView.swift; sourceTree = "<group>"; };
@@ -88,7 +90,7 @@
 		A44219CE763C068CF7BFD0C4 /* RemoteFileView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteFileView.swift; path = RemoteFileView.swift; sourceTree = "<group>"; };
 		AAB77ACF6B8F4024BB321562 /* Pods-YiCamera.debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Pods-YiCamera.debug.xcconfig"; sourceTree = "<group>"; };
 		D39DB018D649AD4FF4A918AB /* FilesystemExplorerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FilesystemExplorerView.swift; path = FilesystemExplorerView.swift; sourceTree = "<group>"; };
-		FABD929DABAFE4C0019A96A2 /* RTSPPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RTSPPlayerView.swift; sourceTree = "<group>"; };
+		F4DBF1FA894CB94630DE4EDD /* Pods-YiCamera.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YiCamera.release.xcconfig"; path = "Target Support Files/Pods-YiCamera/Pods-YiCamera.release.xcconfig"; sourceTree = "<group>"; };
 		FBACEADC17BB02EAED492583 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -98,6 +100,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AAD62EAD484F7F70B9813C2B /* Pods_YiCamera.framework in Frameworks */,
+				8024B63461D05993FF7CB22A /* Pods_YiCamera.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -138,6 +141,16 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		C9816822917DF75DC070B4FB /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				2C74C55E47985D073C55AD6E /* Pods-YiCamera.debug.xcconfig */,
+				F4DBF1FA894CB94630DE4EDD /* Pods-YiCamera.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 		E825F503AF487E271E231AC3 = {
 			isa = PBXGroup;
 			children = (
@@ -145,7 +158,17 @@
 				F31067FE14F30EC6D037CA8C /* Sources */,
 				4D435141275FA2A79717FDC4 /* Products */,
 				18FD2E9F1CF2CD2489382650 /* Projects */,
+				C9816822917DF75DC070B4FB /* Pods */,
+				ECB474D47271AE8D98B74F2A /* Frameworks */,
 			);
+			sourceTree = "<group>";
+		};
+		ECB474D47271AE8D98B74F2A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				45E7620174EF1018C5F35DF6 /* Pods_YiCamera.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		F31067FE14F30EC6D037CA8C /* Sources */ = {
@@ -159,7 +182,6 @@
 				A1EE1BE6695B44B76AD53E06 /* DashboardView.swift */,
 				8B0AA3C31053E6B5328CC350 /* DebugScannerView.swift */,
 				2F43DAA6F654996710DA7E49 /* MediaGalleryView.swift */,
-				FABD929DABAFE4C0019A96A2 /* RTSPPlayerView.swift */,
 				6E321081365BC432AED1F02B /* SettingsView.swift */,
 				883499D348C4B9A7B24457F9 /* YiCameraApp.swift */,
 				0CC034362676E0A6C69CCFC9 /* YiCameraClient.swift */,
@@ -191,10 +213,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A49036B6E7D7BC10CCEEED37 /* Build configuration list for PBXNativeTarget "YiCamera" */;
 			buildPhases = (
+				332639279293CB36582ABA98 /* [CP] Check Pods Manifest.lock */,
 				7E5C884756CA87896CBC72C4 /* Sources */,
 				8D9AAED76D6BCEFF963EDF94 /* Resources */,
 				55E1E2B1EC2D1AAF24359D2B /* Frameworks */,
-				5CEA62EC5F104B518D6AD86B /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -262,25 +284,27 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		5CEA62EC5F104B518D6AD86B /* [CP] Embed Pods Frameworks */ = {
+		332639279293CB36582ABA98 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-YiCamera/Pods-YiCamera-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
 			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
 			);
-			name = "[CP] Embed Pods Frameworks";
+			name = "[CP] Check Pods Manifest.lock";
 			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-YiCamera/Pods-YiCamera-frameworks-${CONFIGURATION}-output-files.xcfilelist",
 			);
 			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-YiCamera-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-YiCamera/Pods-YiCamera-frameworks.sh\"";
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -296,7 +320,6 @@
 				6514808DDCA5B736F72BDB14 /* DashboardView.swift in Sources */,
 				05594D9558C561F26793BB68 /* DebugScannerView.swift in Sources */,
 				7A353AB11810A8CC7B6B289B /* MediaGalleryView.swift in Sources */,
-				7EC3EF958358652F3A1DB18C /* RTSPPlayerView.swift in Sources */,
 				5268C4AC8711904F8A9C08AD /* SettingsView.swift in Sources */,
 				2BC7F7FED101312F5A192784 /* YiCameraApp.swift in Sources */,
 				2619167C96544D2BDF7A1562 /* YiCameraClient.swift in Sources */,
@@ -333,7 +356,7 @@
 /* Begin XCBuildConfiguration section */
 		6D43630BF52F256D2EA29FFB /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 50BC81AA1F6746540BD574A2 /* Pods-YiCamera.release.xcconfig */;
+			baseConfigurationReference = F4DBF1FA894CB94630DE4EDD /* Pods-YiCamera.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -465,7 +488,7 @@
 		};
 		DB76FCB86B75B9D2CD03ABDD /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = AAB77ACF6B8F4024BB321562 /* Pods-YiCamera.debug.xcconfig */;
+			baseConfigurationReference = 2C74C55E47985D073C55AD6E /* Pods-YiCamera.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";

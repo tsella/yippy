@@ -391,7 +391,16 @@ class YiCameraClient: ObservableObject {
             isRecording = false
         case .videoRecordComplete:
             isRecording = false
-            // The file is only on the card once recording completes.
+            // NOT a release. Like precise_capture_data_ready for photos, this
+            // arrives while the camera is still finalising the file: observed
+            // on hardware, a 2455-frame recording followed by the ordinary 5s
+            // heartbeat killed the TCP server outright — every later request
+            // timed out and no vf_start ever arrived.
+            //
+            // Opening the gate here covers a recording stopped from the
+            // physical shutter button, which never goes through stopRecording().
+            // It is a no-op when that path already opened it.
+            if !isCapturing { beginCapture() }
             mediaChangeCount += 1
         case .startPhotoCapture:
             // The camera is busy writing until it reports completion.
@@ -948,6 +957,11 @@ class YiCameraClient: ObservableObject {
 
     // MARK: - Capture gating
 
+    /// Holds every request until the camera finishes writing to the card.
+    ///
+    /// Used for both photos and the end of a recording — the camera is
+    /// single-threaded for both, and a command sent in that window kills its
+    /// TCP server until a power cycle.
     private func beginCapture() {
         isCapturing = true
         captureWatchdog?.cancel()
@@ -1013,9 +1027,17 @@ class YiCameraClient: ObservableObject {
         }
     }
 
+    /// Stops recording, then holds the channel while the camera writes the file.
+    ///
+    /// Finalising a video is as fragile as finalising a photo — the camera goes
+    /// single-threaded and any command in that window kills its TCP server. This
+    /// firmware sends no `stop_video_record`, and `video_record_complete` fires
+    /// *before* the write finishes, so there is no notification that reliably
+    /// means "done": the watchdog in `beginCapture()` is the release path.
     func stopRecording() {
         perform(.recordStop, failureMessage: "Could not stop recording") { [weak self] in
             self?.isRecording = false
+            self?.beginCapture()
         }
     }
 

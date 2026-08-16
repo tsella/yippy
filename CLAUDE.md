@@ -145,16 +145,12 @@ to the same host works fine, which makes it look like a VLC bug. An
 `NSBonjourServices` is declared and a short `NWBrowser` runs on connect purely
 to trigger it.
 
-**A bad VLC option aborts the player before it exists.** `VLCMediaPlayer(options:)`
-validates the whole list at library init: one unknown option or one boolean
-given `=value` and `libvlc_media_player_new` fails, taking the viewfinder with
-it. Boolean options take `--x` / `--no-x` (`--rtsp-http=0` is rejected;
-`--no-rtsp-http` is correct), and `--ipv4` no longer exists in this build.
-Verify any new option against the shipped framework before adding it:
-
-```bash
-strings Pods/MobileVLCKit/MobileVLCKit.xcframework/ios-arm64_armv7_armv7s/MobileVLCKit.framework/MobileVLCKit | grep -x '<option>'
-```
+**MobileVLCKit has been removed** (`RTSPStream` replaced it, hardware-verified).
+There are now **no pods at all** — the app builds from system frameworks alone.
+Do not reintroduce VLC to "fix" a streaming problem: it cannot play this camera,
+for the two reasons above, and the failure modes it adds are subtle (a single
+bad option aborts player creation at library init, taking the viewfinder with
+it — `--rtsp-http=0` and `--ipv4` both did exactly that).
 
 The `START_SESSION` (257) response advertises the stream URL in its `rtsp`
 field; prefer it over hardcoding. Track liveness via the `vf_start`/`vf_stop`
@@ -270,6 +266,24 @@ the camera is still writing it; treating it as "done" let the next command
 through and wedged the TCP server. Only `photo_taken` (or the watchdog)
 releases the gate.
 
+**Ending a recording is exactly as fragile, and was not gated at all.** Observed
+on hardware: a 2455-frame recording, then `RECORD_STOP`, then
+`video_record_complete`, then the ordinary 5-second heartbeat — and the TCP
+server died. Every later request timed out and no `vf_start` ever arrived, so
+the viewfinder never came back either. The camera was still writing the file.
+
+`stopRecording()` therefore opens the capture gate too. Two traps here:
+
+- **This firmware never sends `stop_video_record`** — it goes straight to
+  `video_record_complete`. Gating on the former would never fire.
+- **`video_record_complete` is not a release**, for the same reason
+  `precise_capture_data_ready` is not: it arrives while the camera is still
+  finalising. The watchdog is the release path.
+
+`video_record_complete` *opens* the gate when it is not already open, which
+covers a recording stopped from the physical shutter button — that path never
+goes through `stopRecording()`.
+
 `msg_id` **7 is a camera-initiated notification**, never a request. It has no
 matching outstanding request, so it must not be routed through the
 request/response continuation map.
@@ -302,9 +316,16 @@ Add files and change settings in Xcode directly.
 open YiCamera.xcworkspace
 ```
 
-Always open the **`.xcworkspace`**, never the `.xcodeproj` — MobileVLCKit is a
-CocoaPod and will not link otherwise. If the pods are missing from a fresh
-clone, run `pod install`.
+Open the **`.xcworkspace`**. There are no pods left (MobileVLCKit was the only
+one and has been removed), so the `.xcodeproj` would also link — but the
+workspace is what the build commands below reference, so stay consistent.
+
+`pod install` needs a UTF-8 locale or CocoaPods 1.16 dies inside
+`unicode_normalize` with `Encoding::CompatibilityError`:
+
+```bash
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install
+```
 
 The bundle id is `la.tsel.yippy`, set as `PRODUCT_BUNDLE_IDENTIFIER` in the
 target's build settings.
@@ -317,11 +338,19 @@ xcodebuild -workspace YiCamera.xcworkspace -scheme YiCamera \
   build CODE_SIGNING_ALLOWED=NO
 ```
 
-**The Simulator cannot build this project.** MobileVLCKit 3.7.3 ships its
-simulator slice in a directory named `ios-arm64_i386_x86_64-simulator`; the
-binary does contain `arm64`, but Xcode's xcframework resolver keys off the
-directory name and rejects it on Apple Silicon. Build for `iphoneos` instead —
-which is also the only place the camera protocol can actually be exercised.
+**The Simulator builds again**, now that MobileVLCKit is gone — its 3.7.3
+simulator slice lived in a directory named `ios-arm64_i386_x86_64-simulator`
+that Xcode's xcframework resolver rejected on Apple Silicon. Useful for
+compile-checking UI work:
+
+```bash
+xcodebuild -workspace YiCamera.xcworkspace -scheme YiCamera \
+  -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+  build CODE_SIGNING_ALLOWED=NO
+```
+
+It still cannot join the camera's Wi-Fi, so **nothing below the UI layer can be
+verified there** — protocol changes need a device and a powered-on camera.
 
 ## Layout
 
@@ -330,7 +359,9 @@ which is also the only place the camera protocol can actually be exercised.
 | `Sources/AmbarellaProtocol.swift` | msg_id / rval / notification lookup tables |
 | `Sources/YiCameraClient.swift` | TCP socket, session token, request routing |
 | `Sources/YiFileManager.swift` | Listing, deleting, downloading media |
-| `Sources/RTSPPlayerView.swift` | MobileVLCKit viewfinder wrapper |
+| `Sources/RTSPStream.swift` | Native RTSP/UDP client and RTP receive path |
+| `Sources/H264Depacketizer.swift` | RFC 6184 depacketiser (single NAL, STAP-A, FU-A) |
+| `Sources/H264StreamView.swift` | `AVSampleBufferDisplayLayer` viewfinder |
 | `Sources/*View.swift` | SwiftUI screens |
 
 `YiCameraClient` is `@MainActor` and owns all connection state; views observe it
