@@ -131,6 +131,50 @@ struct DirectoryBrowserView: View {
                 .background(.bar)
                 .textSelection(.enabled)
         }
+        // Downloads report through the file manager, so the browser has to
+        // present that too — without this the button appeared to do nothing,
+        // since both success and failure were being discarded here.
+        .overlay {
+            if let file = fileManager.downloadingFile {
+                ZStack {
+                    Color.black.opacity(0.3).ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        ProgressView(value: fileManager.downloadProgress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 180)
+                        Text(file.name)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Button("Cancel", role: .cancel) { fileManager.cancelDownload() }
+                    }
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let saved = fileManager.savedMessage {
+                Label(saved, systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(radius: 6)
+                    .padding(.bottom, 16)
+                    .task {
+                        try? await Task.sleep(for: .seconds(3))
+                        fileManager.savedMessage = nil
+                    }
+            }
+        }
+        .alert("Download Failed",
+               isPresented: .init(get: { fileManager.errorMessage != nil },
+                                  set: { if !$0 { fileManager.errorMessage = nil } })) {
+            Button("OK") { fileManager.errorMessage = nil }
+        } message: {
+            Text(fileManager.errorMessage ?? "")
+        }
         .task { await load() }
     }
 

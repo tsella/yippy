@@ -131,12 +131,11 @@ final class RTSPProbe: ObservableObject {
         //     here because it derives the local address via a multicast trick
         //     that returns 0.0.0.0 on iOS. NWConnection has no such problem, so
         //     this establishes whether the *camera* will stream over UDP.
-        var udpListener: NWListener?
+        var rtpConnection: NWConnection?
         if session == nil {
             do {
-                let listener = try NWListener(using: .udp)
-                udpListener = listener
-                let port = try await Self.startListener(listener)
+                let (rtp, port) = try Self.bindRTPPort(host: host)
+                rtpConnection = rtp
                 note("Bound local UDP port \(port) for RTP")
 
                 if let setup = await request(
@@ -166,8 +165,8 @@ final class RTSPProbe: ObservableObject {
         note("Listening for RTP packets (5s)…")
         if interleaved {
             await readInterleaved(connection, seconds: 5)
-        } else if let listener = udpListener {
-            await readUDP(listener, seconds: 5)
+        } else if let rtp = rtpConnection {
+            await readUDP(rtp, seconds: 5)
         }
 
         if packetsReceived > 0 {
@@ -180,7 +179,7 @@ final class RTSPProbe: ObservableObject {
         }
 
         _ = await request("TEARDOWN", target: track, headers: ["Session: \(session)"])
-        udpListener?.cancel()
+        rtpConnection?.cancel()
     }
 
     /// Reads `$<channel><length><payload>` frames until the deadline.
@@ -211,52 +210,44 @@ final class RTSPProbe: ObservableObject {
         }
     }
 
-    /// Starts a UDP listener and reports the port it bound.
-    private static func startListener(_ listener: NWListener) async throws -> UInt16 {
-        try await withCheckedThrowingContinuation { continuation in
-            // Clearing the handler on the first terminal state resumes exactly
-            // once; it runs on the listener's own serial queue, so no lock is
-            // needed.
-            listener.stateUpdateHandler = { [weak listener] state in
-                switch state {
-                case .ready:
-                    listener?.stateUpdateHandler = nil
-                    continuation.resume(returning: listener?.port?.rawValue ?? 0)
-                case .failed(let error):
-                    listener?.stateUpdateHandler = nil
-                    continuation.resume(throwing: error)
-                default:
-                    break
-                }
-            }
-            listener.start(queue: .global(qos: .userInitiated))
-        }
+    /// Binds a local UDP port for RTP and reports which one.
+    ///
+    /// `NWListener` is the wrong shape here — it expects inbound *connections*
+    /// and fails with error 22 for a bare unidirectional datagram flow. A
+    /// `NWConnection` to the camera's RTSP port with a pinned local endpoint
+    /// binds the port and can receive the datagrams the camera sends to it.
+    private static func bindRTPPort(host: String) throws -> (NWConnection, UInt16) {
+        // Pick a high even port, as RTP convention expects (RTCP takes port+1).
+        let port = UInt16.random(in: 20000...40000) & ~1
+
+        let parameters = NWParameters.udp
+        parameters.requiredInterfaceType = .wifi
+        parameters.allowLocalEndpointReuse = true
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.any),
+                                                     port: .init(rawValue: port)!)
+
+        let connection = NWConnection(host: NWEndpoint.Host(host),
+                                      port: .init(rawValue: port)!,
+                                      using: parameters)
+        return (connection, port)
     }
 
-    /// Counts RTP datagrams arriving on the bound UDP port.
-    private func readUDP(_ listener: NWListener, seconds: TimeInterval) async {
+    /// Counts RTP datagrams arriving on the bound UDP socket.
+    private func readUDP(_ connection: NWConnection, seconds: TimeInterval) async {
+        connection.start(queue: .global(qos: .userInitiated))
         let deadline = Date().addingTimeInterval(seconds)
 
-        listener.newConnectionHandler = { [weak self] connection in
-            connection.start(queue: .global(qos: .userInitiated))
-            func receiveNext() {
-                connection.receiveMessage { content, _, _, error in
-                    guard error == nil, let content, !content.isEmpty else { return }
-                    Task { @MainActor [weak self] in
-                        self?.packetsReceived += 1
-                        self?.bytesReceived += content.count
-                        if self?.packetsReceived == 1 {
-                            self?.note("  first RTP datagram: \(content.count) bytes")
-                        }
-                    }
-                    receiveNext()
-                }
-            }
-            receiveNext()
-        }
-
         while Date() < deadline, !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(200))
+            guard let datagram = try? await Self.receive(connection, max: 65536),
+                  !datagram.isEmpty else {
+                try? await Task.sleep(for: .milliseconds(100))
+                continue
+            }
+            packetsReceived += 1
+            bytesReceived += datagram.count
+            if packetsReceived == 1 {
+                note("  first RTP datagram: \(datagram.count) bytes")
+            }
         }
     }
 
@@ -350,7 +341,15 @@ final class RTSPProbe: ObservableObject {
         let contentBase = header("Content-Base", in: describe)
             ?? (base.absoluteString.hasSuffix("/") ? base.absoluteString : base.absoluteString + "/")
 
-        for line in sdp.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+        // Split on unicodeScalars, not Characters: "\r\n" is a *single*
+        // grapheme cluster in Swift, so a Character-level split on "\n" or
+        // "\r" matches nothing and leaves the whole SDP as one line — which
+        // made this return Content-Base and the camera answer 400.
+        let lines = sdp.unicodeScalars
+            .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+            .map { String(String.UnicodeScalarView($0)) }
+
+        for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard trimmed.hasPrefix("a=control:") else { continue }
             let value = String(trimmed.dropFirst("a=control:".count))
