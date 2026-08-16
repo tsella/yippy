@@ -48,9 +48,7 @@ struct ConnectionWizardView: View {
             
             // Connect Button
             Button(action: {
-                withAnimation {
-                    client.connect()
-                }
+                client.connect()
             }) {
                 HStack {
                     if client.isConnected {
