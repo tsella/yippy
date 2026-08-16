@@ -561,52 +561,6 @@ class YiCameraClient: ObservableObject {
         }
     }
 
-    /// Resolves the `logo` field of a GET_DEVICE_INFO response to a fetchable
-    /// URL, if the firmware reports one.
-    ///
-    /// The field is undocumented and its shape varies, so all three plausible
-    /// forms are accepted: an absolute http(s) URL, a camera-side absolute
-    /// path under the SD card mount, or a bare filename served from the
-    /// camera's HTTP root.
-    nonisolated static func logoURLCandidates(from info: [String: Any]) -> [URL] {
-        guard let raw = info["logo"].map({ "\($0)" })?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty, raw != "0", raw.lowercased() != "null" else { return [] }
-
-        if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
-            return URL(string: raw).map { [$0] } ?? []
-        }
-
-        // The logo lives on the camera's internal flash (`/tmp/fuse_z/`), not
-        // the SD card mount that media is served from — and how the HTTP server
-        // exposes it is undocumented. Try the plausible mappings in order:
-        // stripped of any `/tmp/fuse_X/` mount prefix (matching how media
-        // paths are served from the root), then the bare filename, then the
-        // full path verbatim.
-        var paths: [String] = []
-        if let range = raw.range(of: #"^/tmp/fuse_[a-z]/"#, options: [.regularExpression, .caseInsensitive]) {
-            paths.append(String(raw[range.upperBound...]))
-        }
-        let filename = (raw as NSString).lastPathComponent
-        paths.append(filename)
-        paths.append(String(raw.drop { $0 == "/" }))
-        // The reported name and the name on disk can differ — a manual browse
-        // of /tmp/fuse_z found `logo.jpg` where the field says `app_logo.jpg`.
-        // Try the other spelling rather than failing on a naming mismatch.
-        if filename.hasPrefix("app_") {
-            paths.append(String(filename.dropFirst("app_".count)))
-        } else {
-            paths.append("app_\(filename)")
-        }
-
-        var seen = Set<String>()
-        return paths.compactMap { path in
-            guard !path.isEmpty, seen.insert(path).inserted else { return nil }
-            let escaped = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
-            return URL(string: "http://\(host)/\(escaped)")
-        }
-    }
-
     /// Derives a stable per-device identifier from GET_DEVICE_INFO.
     ///
     /// Best-effort: a camera that reports nothing usable keeps the default, so

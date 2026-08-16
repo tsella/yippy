@@ -139,39 +139,6 @@ final class ThumbnailLoader: ObservableObject {
         }
     }
 
-    /// Fetches the camera's logo image, caching it per camera.
-    ///
-    /// Cached under a fixed name rather than a content-derived key: there is
-    /// one logo per camera and it does not change, so a cache hit avoids
-    /// re-fetching it on every visit to Settings.
-    /// Tries each candidate URL until one yields an image, since how the
-    /// camera's HTTP server exposes internal-flash paths is undocumented.
-    func logo(from candidates: [URL]) async -> UIImage? {
-        let cameraID = self.cameraID
-        if let hit = await ThumbnailCache.shared.image(named: "logo.png", cameraID: cameraID) {
-            return hit
-        }
-        // Remember a miss for the session. `GET_DEVICE_INFO` reports the logo
-        // at /tmp/fuse_z/, internal flash the HTTP server does not appear to
-        // serve, so every candidate 404s — and retrying on each settings visit
-        // costs three fetches at a 15s timeout over the camera's slow link.
-        guard !camerasWithoutLogo.contains(cameraID) else { return nil }
-
-        for url in candidates {
-            guard let data = await Self.fetch(url, timeout: 15),
-                  let image = UIImage(data: data) else { continue }
-            print("[settings] logo loaded from \(url)")
-            await ThumbnailCache.shared.store(image, named: "logo.png", cameraID: cameraID)
-            return image
-        }
-        camerasWithoutLogo.insert(cameraID)
-        return nil
-    }
-
-    /// Cameras whose logo could not be fetched this session. Not persisted: a
-    /// firmware update could add the route, and a relaunch is cheap to retry.
-    private var camerasWithoutLogo: Set<String> = []
-
     /// Reconciles the disk cache with the camera's current contents.
     ///
     /// Resolves the camera id internally, from the same source `store` uses, so

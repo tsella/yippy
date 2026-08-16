@@ -439,11 +439,20 @@ The `1282` listing returns both as ordinary entries, so:
 `/tmp/fuse_d/` is the SD card, and the HTTP server serves it from the root —
 `/tmp/fuse_d/DCIM/100MEDIA/x.jpg` is fetched as `http://192.168.42.1/DCIM/100MEDIA/x.jpg`.
 
-But it is not the only mount. `GET_DEVICE_INFO` reports the camera's logo as
-`/tmp/fuse_z/app_logo.jpg` — internal flash, not the card. How the HTTP server
-exposes that is undocumented, so `logoURLCandidates` strips any `/tmp/fuse_X/`
-prefix and falls back to the bare filename and the verbatim path, logging which
-one worked. **Do not assume `mediaRoot` is the only prefix to strip.**
+But it is not the only mount, and **only the SD card mount is reachable over
+HTTP.** `GET_DEVICE_INFO` reports the camera's logo as `/tmp/fuse_z/app_logo.jpg`
+— internal flash, not the card — and no URL derived from it is servable. Every
+plausible mapping was tried on hardware (mount prefix stripped, bare filename,
+verbatim path, `app_`-prefixed and unprefixed spellings) and all 404.
+
+**The logo feature has been removed.** Do not reimplement it: the field parses
+fine and the paths look reasonable, which makes this an easy dead end to walk
+back into. The `logo` key stays in `SettingsView.hiddenKeys` so the raw device
+path is not shown as a settings row.
+
+The general rule this leaves: a path in a `GET_DEVICE_INFO` field is a
+*camera-side filesystem path*, not a URL, and only `/tmp/fuse_d/` has an HTTP
+route.
 
 ## App Transport Security
 
