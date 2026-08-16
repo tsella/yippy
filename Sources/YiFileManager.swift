@@ -110,6 +110,9 @@ class YiFileManager: ObservableObject {
     @Published var savedMessage: String?
     @Published private(set) var isDeleting = false
     @Published private(set) var deleteProgress: Double = 0
+    /// Paths of preview sidecars the camera actually reported, so a delete is
+    /// only issued for one that exists.
+    private var sidecarPaths: Set<String> = []
 
     private let client: YiCameraClient
     private var downloadTask: Task<Void, Never>?
@@ -149,10 +152,17 @@ class YiFileManager: ObservableObject {
                 return
             }
 
-            // The camera lists a .THM sidecar next to every media file. Those
-            // are previews, not media — showing them would double the gallery
-            // and fill it with tiny duplicate entries.
-            files = Self.parse(listing: listing)
+            let all = Self.parse(listing: listing)
+
+            // Record which sidecars actually exist. The path can be derived
+            // from the media name, but deriving it does not mean the file is
+            // there — issuing a delete for one that is not present returns
+            // -1/-13 from the camera. The listing is the authority.
+            sidecarPaths = Set(all.filter(\.isThumbnail).map(\.path))
+
+            // Sidecars are previews, not media — showing them would double the
+            // gallery and fill it with tiny duplicate entries.
+            files = all
                 .filter { !$0.isThumbnail }
                 .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
         } catch {
@@ -251,11 +261,13 @@ class YiFileManager: ObservableObject {
                 _ = try await client.send(.deleteFile, param: file.path)
 
                 // Remove the sidecar too, or the card fills with orphaned
-                // previews for media that no longer exists. Best-effort: the
-                // media file is already gone, so a missing sidecar is not a
-                // failure worth surfacing.
-                if let thumbnailPath = file.thumbnailPath {
+                // previews for media that no longer exists — but only if the
+                // listing actually reported one. Deleting a derived path that
+                // does not exist just draws -1/-13 from the camera.
+                if let thumbnailPath = file.thumbnailPath,
+                   sidecarPaths.contains(thumbnailPath) {
                     _ = try? await client.send(.deleteFile, param: thumbnailPath)
+                    sidecarPaths.remove(thumbnailPath)
                 }
 
                 files.removeAll { $0.id == file.id }
